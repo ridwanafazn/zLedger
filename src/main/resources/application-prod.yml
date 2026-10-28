@@ -1,0 +1,48 @@
+# ============================================================================
+# FinLedger Engine - Production Profile
+# All sensitive values MUST be supplied via environment variables (.env or
+# platform secret manager). Defaults here are safe placeholders only.
+# ============================================================================
+
+spring:
+  profiles:
+    active: prod
+
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 20000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+  data.redis:
+    lettuce:
+      shutdown-timeout: 100ms
+
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+
+logging:
+  level:
+    root: WARN
+    com.alfagift.finledger: INFO
+    org.springframework.kafka: ERROR
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: never

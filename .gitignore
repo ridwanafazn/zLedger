@@ -1,0 +1,33 @@
+# Environment
+.env
+.env.local
+
+# Build output
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+
+# Logs
+*.log
+spring-boot.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Test coverage
+target/site/
+jacoco*.exec

@@ -1,0 +1,81 @@
+# ============================================================================
+# FinLedger Engine - CI Pipeline (GitHub Actions)
+# Runs on every push and pull request.
+# ============================================================================
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: finledger
+          POSTGRES_USER: finledger
+          POSTGRES_PASSWORD: finledger_dev_secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finledger -d finledger"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+
+      - name: Validate Maven wrapper / Maven version
+        run: mvn --version
+
+      - name: Build and run tests
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: finledger
+          DB_USERNAME: finledger
+          DB_PASSWORD: finledger_dev_secret
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_PASSWORD: ""
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          SPRING_PROFILES_ACTIVE: dev
+        run: mvn clean verify -B
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: target/surefire-reports/
+
+      - name: Build Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker build -t finledger-engine:${{ github.sha }} .
+          echo "Image built: finledger-engine:${{ github.sha }}"

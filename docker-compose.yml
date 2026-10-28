@@ -1,0 +1,91 @@
+# ============================================================================
+# FinLedger Engine - Local Infrastructure (Docker Compose)
+# Spins up PostgreSQL, Redis, and Apache Kafka (KRaft mode) for development.
+# ============================================================================
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 - Primary database for double-entry ledger
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: finledger-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-finledger}
+      POSTGRES_USER: ${DB_USERNAME:-finledger}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-finledger_dev_secret}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - finledger_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-finledger} -d ${DB_NAME:-finledger}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finledger-net
+
+  # --------------------------------------------------------------------------
+  # Redis 7 - Caching, distributed locking, idempotency store
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: finledger-redis
+    command: >
+      sh -c "redis-server --save '' --appendonly no
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}"
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - finledger_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - finledger-net
+
+  # --------------------------------------------------------------------------
+  # Apache Kafka 4.x (KRaft mode - no separate Zookeeper required)
+  # --------------------------------------------------------------------------
+  kafka:
+    image: bitnami/kafka:4.0
+    container_name: finledger-kafka
+    environment:
+      # KRaft configuration
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # Topic auto-creation (dev convenience; disable in prod)
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}:9092"
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - finledger-net
+
+# --------------------------------------------------------------------------
+# Named volumes
+# --------------------------------------------------------------------------
+volumes:
+  finledger_postgres_data:
+  finledger_redis_data:
+
+# --------------------------------------------------------------------------
+# Network
+# --------------------------------------------------------------------------
+networks:
+  finledger-net:
+    driver: bridge
