@@ -129,13 +129,27 @@ http://localhost:8080/v3/api-docs
 
 ## Endpoint API (Ringkasan)
 
-| Method | Endpoint | Deskripsi |
-|--------|----------|-----------|
-| `POST` | `/api/v1/ledger/checkout` | Pembayaran multi-tender (IDR + A_Poin) |
-| `POST` | `/api/v1/ledger/redeem` | Tebasan flash sale (A_Poin) |
-| `GET` | `/api/v1/ledger/accounts/{accountId}/mutations` | Sejarah mutasi akaun |
+| Method | Endpoint | Deskripsi | Status |
+|--------|----------|-----------|--------|
+| `POST` | `/api/v1/ledger/checkout` | Pembayaran multi-tender (IDR + A_Poin) | ✅ |
+| `POST` | `/api/v1/ledger/redeem` | Tebasan flash sale (A_Poin) | ✅ |
+| `GET` | `/api/v1/ledger/accounts/{accountId}/mutations` | Sejarah mutasi akaun | ✅ |
 
-Semua endpoint dilengkapi `@Operation`, `@ApiResponses`, dan contoh payload dalam Swagger UI.
+> **Spesifikasi lengkap** (semua endpoint terencana, state machine, katalog error code, edge case, dan kebutuhan FE) ada di
+> [`docs/API_SPEC.md`](docs/API_SPEC.md). Semua endpoint dilengkapi `@Operation`, `@ApiResponses`, dan contoh payload dalam Swagger UI.
+
+---
+
+## Dokumentasi Desain
+
+| Dokumen | Isi |
+|---------|-----|
+| [`docs/API_SPEC.md`](docs/API_SPEC.md) | Spesifikasi API v1 (kontrak BE↔FE) |
+| [`docs/BLOB_STORAGE_DECISION.md`](docs/BLOB_STORAGE_DECISION.md) | Keputusan blob storage (MinIO + S3) |
+| [`docs/ADR/`](docs/ADR/) | Architecture Decision Records |
+| [`PRD TRD.md`](PRD%20TRD.md) | Product & Technical Requirements |
+| [`ERD.md`](ERD.md) | Entity Relationship Diagram |
+| [`BUILD_MANIFEST.md`](BUILD_MANIFEST.md) | Bukti progres & roadmap |
 
 ---
 

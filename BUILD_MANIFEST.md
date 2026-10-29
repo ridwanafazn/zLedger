@@ -215,12 +215,79 @@ zLedger/
 
 ---
 
-## Langkah Seterusnya (Opsional)
+## Status Terkini (per 2026-10-29)
 
-- Tambah security (Spring Security + JWT) untuk proteksi endpoint
-- Tambah Spring Boot Actuator custom metrics (transaksi per detik, error rate)
-- Tambah Docker Compose dengan Kafka sebenarnya untuk integration test end-to-end
-- Deploy ke cloud (AWS/GCP) untuk demo produksi
+| Item | Status |
+|------|--------|
+| Fase 1-7 | ✅ Selesai |
+| App startup (health UP, db/redis connected) | ✅ |
+| Swagger/OpenAPI (`/v3/api-docs`) | ✅ Fixed (springdoc 2.7.0) |
+| Docker infra (Postgres/Redis/Kafka) | ✅ Running |
+| Commit hardening | ✅ `f162778` |
+
+### Perbaikan yang diterapkan
+- `pom.xml`: springdoc-openapi 2.6.0 → **2.7.0** (kompatibel Spring Boot 3.4.0).
+- `application.yml` / `application-dev.yml`: `ddl-auto: validate` → **create-drop** (dev/base).
+- `application.yml`: hapus `spring.data.redis.password` (cegah AUTH kosong).
+- `AccountRepository`: `findByIdForUpdate` → **`findById` + `@Lock(PESSIMISTIC_WRITE)`**.
+- `docker-compose.yml`: `CLUSTER_ID` Kafka KRaft berupa **base64 UUID valid**.
+- Entities: `@Builder.Default` pada koleksi `ledgerEntries`.
+
+---
+
+## Rencana & Rancangan (Design Lock — Dokumentasi)
+
+Seluruh keputusan desain telah difinalkan dan didokumentasikan **sebelum** menulis kode baru.
+Rujukan utama:
+
+| Dokumen | Isi |
+|---------|-----|
+| [`docs/API_SPEC.md`](docs/API_SPEC.md) | Spesifikasi API v1 lengkap: katalog endpoint, state machine, katalog error code, edge case, checklist FE |
+| [`docs/BLOB_STORAGE_DECISION.md`](docs/BLOB_STORAGE_DECISION.md) | Keputusan blob storage (MinIO + S3-compatible), konfigurasi, alur presigned upload |
+| [`docs/ADR/001-pessimistic-locking.md`](docs/ADR/001-pessimistic-locking.md) | Alasan pessimistic write lock |
+| [`docs/ADR/002-idempotency-redis-aop.md`](docs/ADR/002-idempotency-redis-aop.md) | Idempotency AOP + Redis |
+| [`docs/ADR/003-redeem-request-shape.md`](docs/ADR/003-redeem-request-shape.md) | Shape request `/redeem` + rencana deprecation |
+| [`docs/ADR/004-ddl-strategy.md`](docs/ADR/004-ddl-strategy.md) | Strategi DDL dev vs produksi |
+| [`docs/ADR/005-blob-storage.md`](docs/ADR/005-blob-storage.md) | Ringkasan keputusan blob storage |
+
+### Roadmap Endpoint (ringkas — detail di API_SPEC §6)
+
+| Prioritas | Endpoint | Status |
+|-----------|----------|--------|
+| P0 | `POST /checkout`, `POST /redeem`, `GET /accounts/{id}/mutations` | ✅ Implemented |
+| P0 | Account CRUD + `/balance` + `PATCH /status` | ⏳ Planned |
+| P0 | `GET /transactions`, `GET /transactions/{id}` | ⏳ Planned |
+| P1 | `POST /transactions/{id}/reverse` | ⏳ Planned |
+| P1 | Voucher CRUD | ⏳ Planned |
+| P1 | Blob upload (`/upload/*`, `/files/*`) | ⏳ Planned |
+| P2 | Rewards, Settlement, Reconciliation | ⏳ Planned |
+| P3 | Idempotency admin | ⏳ Planned |
+
+### Roadmap Hardening & Cloud (belum dikoding)
+
+**Sprint 1 — Local Hardening**
+1. Flyway migration (ganti `ddl-auto` di prod)
+2. Spring Security + JWT + RBAC
+3. RFC 7807 Problem Details (`application/problem+json`)
+4. Correlation ID (MDC + `X-Request-ID`) & structured logging
+5. Actuator custom metrics (TPS, latency histogram)
+6. Resilience4j (circuit breaker/retry)
+7. ArchUnit (enforce Clean Architecture)
+
+**Sprint 2 — Observability & Reliability Proof**
+8. Transactional Outbox (jaminan publish Kafka)
+9. k6 load test suite + report terkomit
+10. Chaos test (Testcontainers kill DB/Kafka mid-tx)
+11. Mutation testing (PITest >80%)
+12. Static analysis report (SpotBugs/Checkstyle, OWASP Dependency-Check)
+
+**Sprint 3 — Cloud Deployment (setelah lokal terbukti)**
+13. GCP/GCR setup (Cloud Run, Cloud SQL, Memorystore, Artifact Registry, Secret Manager)
+14. GitHub Actions CD → Cloud Run
+15. Smoke + load test terhadap URL live
+16. README/ADR polish + live demo URL
+
+> Prinsip: **local-first**. Semua logika, kebenaran, performa baseline, dan resiliensi dibuktikan penuh di lokal Windows sebelum menyentuh cloud. Hanya perilaku cloud-specific (cold start, routing, IAM) yang butuh lingkungan cloud.
 
 ---
 
