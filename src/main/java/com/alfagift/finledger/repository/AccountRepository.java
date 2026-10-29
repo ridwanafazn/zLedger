@@ -29,7 +29,7 @@ public interface AccountRepository extends JpaRepository<Account, UUID> {
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(value = @QueryHint(name = "jakarta.persistence.lock.timeout", value = "5000"))
-    Optional<Account> findByIdForUpdate(UUID id);
+    Optional<Account> findById(UUID id);
 
     /**
      * Mencari akaun berdasarkan pemilik dan mata wang.

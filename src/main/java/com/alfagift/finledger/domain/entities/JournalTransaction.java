@@ -50,6 +50,7 @@ public class JournalTransaction {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Builder.Default
     @OneToMany(mappedBy = "journalTransaction", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LedgerEntry> ledgerEntries = new ArrayList<>();
 

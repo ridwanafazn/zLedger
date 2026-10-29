@@ -6,6 +6,7 @@ import com.alfagift.finledger.dto.CheckoutRequest.TenderDetail;
 import com.alfagift.finledger.dto.CheckoutResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.IdempotencyRejectedException;
+import com.alfagift.finledger.infrastructure.exception.GlobalExceptionHandler;
 import com.alfagift.finledger.service.LedgerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,7 +58,9 @@ class LedgerControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(ledgerController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(ledgerController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test

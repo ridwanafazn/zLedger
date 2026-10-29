@@ -24,7 +24,7 @@ spring:
   # --- JPA / Hibernate ---
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: create-drop
     show-sql: false
     properties:
       hibernate:
@@ -38,7 +38,6 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
       lettuce:
         shutdown-timeout: 200ms
 

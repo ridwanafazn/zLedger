@@ -147,18 +147,16 @@ class LedgerServiceImplTest {
         assertThat(merchantAccount.getBalance()).isEqualByComparingTo(new BigDecimal("550000.00"));
 
         // Then - Journal transaction saved with correct idempotency key
-        verify(journalTransactionRepository, times(1)).save(any(JournalTransaction.class));
+        // (disimpan 2 kali: sekali untuk generate ID, sekali setelah menambahkan ledger entries)
+        verify(journalTransactionRepository, times(2)).save(any(JournalTransaction.class));
         JournalTransaction capturedJournal = captureJournalTransaction();
         assertThat(capturedJournal.getIdempotencyKey()).isEqualTo("idem-key-001");
         assertThat(capturedJournal.getReferenceType()).isEqualTo(ReferenceType.PAYMENT);
 
         // Then - Ledger entries: exactly 2 entries (1 DEBIT, 1 CREDIT), equal amounts
-        ArgumentCaptor<JournalTransaction> journalCaptor = ArgumentCaptor.forClass(JournalTransaction.class);
-        verify(journalTransactionRepository).save(journalCaptor.capture());
-        JournalTransaction savedJournal = journalCaptor.getValue();
-        assertThat(savedJournal.getLedgerEntries()).hasSize(2);
+        assertThat(capturedJournal.getLedgerEntries()).hasSize(2);
 
-        List<LedgerEntry> entries = savedJournal.getLedgerEntries();
+        List<LedgerEntry> entries = capturedJournal.getLedgerEntries();
         long debitCount = entries.stream()
                 .filter(e -> e.getEntryType() == EntryType.DEBIT)
                 .count();
@@ -282,15 +280,21 @@ class LedgerServiceImplTest {
     }
 
     @Test
-    @DisplayName("Harus melempar exception jika akaun pelanggan tidak dijumpai")
+    @DisplayName("Harus melempar InsufficientBalanceException jika akaun pelanggan tidak dijumpai (dibuat dengan balans nol)")
     void processMultiTenderPayment_shouldThrowWhenCustomerAccountNotFound() {
-        // Given
+        // Given - akaun tidak dijumpai, sistem akan mencipta akaun baru dengan balans nol
         when(accountRepository.findByOwnerIdAndCurrency("cust-001", Currency.IDR))
                 .thenReturn(Optional.empty());
+        when(accountRepository.save(any(Account.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        // When & Then
+        // When & Then - balans nol tidak mencukupi untuk totalAmount 50000
         assertThatThrownBy(() -> ledgerService.processMultiTenderPayment(request))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InsufficientBalanceException.class)
+                .hasMessageContaining("tidak mencukupi");
+
+        // Tidak ada journal yang disimpan
+        verify(journalTransactionRepository, never()).save(any());
     }
 
     /* ------------------------------------------------------------------ */
@@ -352,7 +356,7 @@ class LedgerServiceImplTest {
 
         verify(accountRepository, times(2)).save(customerAccount);
         verify(accountRepository, times(2)).save(merchantAccount);
-        verify(journalTransactionRepository, times(2)).save(any(JournalTransaction.class));
+        verify(journalTransactionRepository, times(4)).save(any(JournalTransaction.class));
     }
 
     /* ------------------------------------------------------------------ */
@@ -361,7 +365,9 @@ class LedgerServiceImplTest {
 
     private JournalTransaction captureJournalTransaction() {
         ArgumentCaptor<JournalTransaction> captor = ArgumentCaptor.forClass(JournalTransaction.class);
-        verify(journalTransactionRepository).save(captor.capture());
+        // save dipanggil 2 kali per transaksi (generate ID + setelah menambahkan ledger entries).
+        // Kedua capture merujuk pada objek journal yang sama, sehingga entri ledger sudah lengkap.
+        verify(journalTransactionRepository, times(2)).save(captor.capture());
         return captor.getValue();
     }
 }

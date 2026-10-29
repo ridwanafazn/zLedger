@@ -47,25 +47,26 @@ services:
       - finledger-net
 
   # --------------------------------------------------------------------------
-  # Apache Kafka 4.x (KRaft mode - no separate Zookeeper required)
+  # Apache Kafka (KRaft mode - no separate Zookeeper required)
   # --------------------------------------------------------------------------
   kafka:
-    image: bitnami/kafka:4.0
+    image: confluentinc/cp-kafka:7.5.0
     container_name: finledger-kafka
     environment:
       # KRaft configuration
-      KAFKA_CFG_NODE_ID: 0
-      KAFKA_CFG_PROCESS_ROLES: controller,broker
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_NODE_ID: 0
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       # Topic auto-creation (dev convenience; disable in prod)
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: oolb5PTbW0GZH0uh5yBQvw
     ports:
-      - "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}:9092"
+      - "${KAFKA_PORT:-9092}:9092"
     depends_on:
       - redis
     healthcheck:
