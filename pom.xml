@@ -31,6 +31,7 @@
         <lombok.version>1.18.36</lombok.version>
         <springdoc.version>2.7.0</springdoc.version>
         <testcontainers.version>1.20.3</testcontainers.version>
+        <flyway.version>10.17.1</flyway.version>
     </properties>
 
     <dependencies>
@@ -95,6 +96,18 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Flyway Database Migration -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -139,6 +152,29 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway.version}</version>
+                <configuration>
+                    <url>jdbc:postgresql://localhost:5432/finledger</url>
+                    <user>finledger</user>
+                    <password>finledger_dev_secret</password>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                    <baselineOnMigrate>true</baselineOnMigrate>
+                    <baselineVersion>0</baselineVersion>
+                    <validateOnMigrate>true</validateOnMigrate>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.postgresql</groupId>
+                        <artifactId>postgresql</artifactId>
+                        <version>42.7.3</version>
+                    </dependency>
+                </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
