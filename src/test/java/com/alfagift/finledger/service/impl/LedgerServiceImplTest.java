@@ -1,6 +1,7 @@
 package com.alfagift.finledger.service.impl;
 
 import com.alfagift.finledger.domain.enums.AccountType;
+import com.alfagift.finledger.domain.enums.AccountStatus;
 import com.alfagift.finledger.domain.enums.Currency;
 import com.alfagift.finledger.domain.enums.EntryType;
 import com.alfagift.finledger.domain.enums.ReferenceType;
@@ -11,6 +12,7 @@ import com.alfagift.finledger.domain.events.PointsAwardedEvent;
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
 import com.alfagift.finledger.dto.CheckoutRequest.TenderDetail;
+import com.alfagift.finledger.infrastructure.AccountInactiveException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.kafka.LoyaltyPointsProducer;
 import com.alfagift.finledger.repository.AccountRepository;
@@ -357,6 +359,112 @@ class LedgerServiceImplTest {
         verify(accountRepository, times(2)).save(customerAccount);
         verify(accountRepository, times(2)).save(merchantAccount);
         verify(journalTransactionRepository, times(4)).save(any(JournalTransaction.class));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Sprint B: locking & status guard                                    */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("Harus mengunci akaun dalam urutan deterministik (anti-deadlock)")
+    void shouldLockAccountsInDeterministicOrder() {
+        // Given — dua akaun yang sudah pernah di-flush (version terisi)
+        UUID customerId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        UUID merchantId = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+
+        // customer sengaja diberi UUID "besar", merchant UUID "kecil"
+        customerAccount.setId(customerId);
+        customerAccount.setVersion(0L);
+        merchantAccount.setId(merchantId);
+        merchantAccount.setVersion(0L);
+
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
+                .thenReturn(Optional.of(customerAccount));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
+                .thenReturn(Optional.of(merchantAccount));
+        when(accountRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customerAccount));
+        when(accountRepository.findByIdForUpdate(merchantId)).thenReturn(Optional.of(merchantAccount));
+        when(journalTransactionRepository.save(any(JournalTransaction.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(accountRepository.save(any(Account.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        UUID firstExpected = customerId.compareTo(merchantId) <= 0 ? customerId : merchantId;
+        UUID secondExpected = firstExpected.equals(customerId) ? merchantId : customerId;
+
+        // When
+        ledgerService.processMultiTenderPayment(request);
+
+        // Then — urutan lock mengikuti compareTo UUID, bukan urutan bisnis
+        org.mockito.InOrder inOrder = inOrder(accountRepository);
+        inOrder.verify(accountRepository).findByIdForUpdate(firstExpected);
+        inOrder.verify(accountRepository).findByIdForUpdate(secondExpected);
+    }
+
+    @Test
+    @DisplayName("Harus menolak transaksi bila akun pelanggan SUSPENDED")
+    void shouldRejectSuspendedCustomer() {
+        customerAccount.setStatus(AccountStatus.SUSPENDED);
+
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
+                .thenReturn(Optional.of(customerAccount));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
+                .thenReturn(Optional.of(merchantAccount));
+
+        assertThatThrownBy(() -> ledgerService.processMultiTenderPayment(request))
+                .isInstanceOf(AccountInactiveException.class)
+                .hasMessageContaining("SUSPENDED");
+
+        verify(journalTransactionRepository, never()).save(any(JournalTransaction.class));
+    }
+
+    @Test
+    @DisplayName("Harus menolak transaksi bila akun merchant CLOSED")
+    void shouldRejectClosedMerchant() {
+        merchantAccount.setStatus(AccountStatus.CLOSED);
+
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
+                .thenReturn(Optional.of(customerAccount));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
+                .thenReturn(Optional.of(merchantAccount));
+
+        assertThatThrownBy(() -> ledgerService.processMultiTenderPayment(request))
+                .isInstanceOf(AccountInactiveException.class)
+                .hasMessageContaining("CLOSED");
+
+        verify(journalTransactionRepository, never()).save(any(JournalTransaction.class));
+    }
+
+    @Test
+    @DisplayName("Redeem harus menolak akun pelanggan yang SUSPENDED")
+    void redeemShouldRejectSuspendedCustomer() {
+        Account apoinCustomer = Account.builder()
+                .id(UUID.randomUUID())
+                .ownerId("cust-001")
+                .accountName("Dompet cust-001 - A_POIN")
+                .accountType(AccountType.LIABILITY)
+                .currency(Currency.A_POIN)
+                .balance(new BigDecimal("100000.00"))
+                .status(AccountStatus.SUSPENDED)
+                .build();
+
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.A_POIN))
+                .thenReturn(Optional.of(apoinCustomer));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("system", Currency.A_POIN))
+                .thenReturn(Optional.of(Account.builder()
+                        .id(UUID.randomUUID())
+                        .ownerId("system")
+                        .accountName("Pool Promosi Sistem - A_POIN")
+                        .accountType(AccountType.EXPENSE)
+                        .currency(Currency.A_POIN)
+                        .balance(new BigDecimal("500000.00"))
+                        .build()));
+
+        assertThatThrownBy(() -> ledgerService.redeemFlashSale(
+                "cust-001", UUID.randomUUID(), 1000, "idem-redeem-001"))
+                .isInstanceOf(AccountInactiveException.class);
+
+        verify(journalTransactionRepository, never()).save(any(JournalTransaction.class));
     }
 
     /* ------------------------------------------------------------------ */

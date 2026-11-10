@@ -1,6 +1,7 @@
 package com.alfagift.finledger.service.impl;
 
 import com.alfagift.finledger.domain.enums.AccountType;
+import com.alfagift.finledger.domain.enums.AccountStatus;
 import com.alfagift.finledger.domain.enums.Currency;
 import com.alfagift.finledger.domain.enums.EntryType;
 import com.alfagift.finledger.domain.enums.ReferenceType;
@@ -10,6 +11,7 @@ import com.alfagift.finledger.domain.entities.LedgerEntry;
 import com.alfagift.finledger.domain.events.PointsAwardedEvent;
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.infrastructure.AccountInactiveException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.kafka.LoyaltyPointsProducer;
 import com.alfagift.finledger.repository.AccountRepository;
@@ -62,14 +64,20 @@ public class LedgerServiceImpl implements LedgerService {
         // 2. Ambil akaun merchant (REVENUE)
         Account merchantAccount = getOrCreateMerchantAccount(request.getMerchantId(), request.getCurrency());
 
-        // 3. Validasi balans pelanggan mencukupi untuk total pembayaran
+        // 3. Kunci kedua akaun dengan urutan deterministik (cegah deadlock) dan
+        //    pastikan statusnya ACTIVE sebelum mengubah saldo.
+        lockAccountsForUpdate(customerAccount, merchantAccount);
+        ensureActive(customerAccount);
+        ensureActive(merchantAccount);
+
+        // 4. Validasi balans pelanggan mencukupi untuk total pembayaran
         if (customerAccount.getBalance().compareTo(request.getTotalAmount()) < 0) {
             throw new InsufficientBalanceException(
                     String.format("Balans %s tidak mencukupi. Tersedia: %s, Diperlukan: %s",
                             request.getCurrency(), customerAccount.getBalance(), request.getTotalAmount()));
         }
 
-        // 4. Buat JournalTransaction
+        // 5. Buat JournalTransaction
         JournalTransaction journal = JournalTransaction.builder()
                 .idempotencyKey(request.getIdempotencyKey())
                 .referenceType(ReferenceType.PAYMENT)
@@ -78,7 +86,7 @@ public class LedgerServiceImpl implements LedgerService {
                 .build();
         journal = journalTransactionRepository.save(journal);
 
-        // 5. Buat entri ledger: DEBIT pelanggan, CREDIT merchant
+        // 6. Buat entri ledger: DEBIT pelanggan, CREDIT merchant
         LedgerEntry debitEntry = LedgerEntry.builder()
                 .journalTransaction(journal)
                 .account(customerAccount)
@@ -96,7 +104,7 @@ public class LedgerServiceImpl implements LedgerService {
         journal.addLedgerEntry(debitEntry);
         journal.addLedgerEntry(creditEntry);
 
-        // 6. Kemaskini balans
+        // 7. Kemaskini balans
         customerAccount.setBalance(customerAccount.getBalance().subtract(request.getTotalAmount()));
         merchantAccount.setBalance(merchantAccount.getBalance().add(request.getTotalAmount()));
 
@@ -104,7 +112,7 @@ public class LedgerServiceImpl implements LedgerService {
         accountRepository.save(merchantAccount);
         journalTransactionRepository.save(journal);
 
-        // 7. Kirim Kafka event jika A_Poin terlibat dalam tenders
+        // 8. Kirim Kafka event jika A_Poin terlibat dalam tenders
         boolean involvesAPoin = request.getTenders().stream()
                 .anyMatch(t -> t.getCurrency() == Currency.A_POIN);
 
@@ -139,6 +147,12 @@ public class LedgerServiceImpl implements LedgerService {
 
         Account customerAccount = getOrCreateCustomerAccount(ownerId, Currency.A_POIN);
 
+        // Kunci akaun pelanggan + pool promosi dengan urutan deterministik
+        Account promoPool = getOrCreatePromoPool();
+        lockAccountsForUpdate(customerAccount, promoPool);
+        ensureActive(customerAccount);
+        ensureActive(promoPool);
+
         BigDecimal pointsBigDecimal = BigDecimal.valueOf(points);
         if (customerAccount.getBalance().compareTo(pointsBigDecimal) < 0) {
             throw new InsufficientBalanceException(
@@ -161,7 +175,6 @@ public class LedgerServiceImpl implements LedgerService {
                 .build();
 
         // System promo pool (EXPENSE) menerima credit
-        Account promoPool = getOrCreatePromoPool();
         LedgerEntry creditEntry = LedgerEntry.builder()
                 .journalTransaction(journal)
                 .account(promoPool)
@@ -199,6 +212,41 @@ public class LedgerServiceImpl implements LedgerService {
     /* ------------------------------------------------------------------ */
     /* Helper methods                                                     */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * Mengunci akaun dengan {@code SELECT ... FOR UPDATE} dalam urutan UUID menaik.
+     * <p>
+     * Urutan yang konsisten untuk semua transaksi mencegah deadlock ketika dua
+     * transaksi menyentuh pasangan akaun yang sama dengan arah berbeda.
+     * <p>
+     * Akaun yang baru dibuat di transaksi ini ({@code version == null}, belum
+     * pernah di-flush) dilewati karena belum terlihat oleh transaksi lain.
+     */
+    private void lockAccountsForUpdate(Account... accounts) {
+        List<UUID> ids = java.util.Arrays.stream(accounts)
+                .filter(java.util.Objects::nonNull)
+                .filter(account -> account.getVersion() != null)
+                .map(Account::getId)
+                .distinct()
+                .sorted()
+                .toList();
+
+        for (UUID id : ids) {
+            accountRepository.findByIdForUpdate(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Akun tidak ditemukan: " + id));
+        }
+    }
+
+    /**
+     * Menolak transaksi bila akaun tidak berstatus ACTIVE.
+     */
+    private void ensureActive(Account account) {
+        if (account.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccountInactiveException(String.format(
+                    "Akun %s (%s) berstatus %s dan tidak dapat bertransaksi",
+                    account.getId(), account.getOwnerId(), account.getStatus()));
+        }
+    }
 
     private Account getOrCreateCustomerAccount(String ownerId, Currency currency) {
         return accountRepository.findAccountByOwnerIdAndCurrencyCustom(ownerId, currency)
