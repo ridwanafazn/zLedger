@@ -88,9 +88,10 @@
 
 ## Catatan CI
 
-- **Status: hijau** (run `42762838986`, 4m26s) untuk commit final Fase H `311514b`.
-- Run hijau sebelumnya: `42762128490` (Fase H awal, 4m55s), `42759043214` (Fase F/G).
+- **Status: hijau** (run `42766358423`, 4m09s) untuk commit Fase I `5d1f03b`.
+- Run hijau sebelumnya: `42763365595` (dokumentasi Fase H), `42763170381` (logout), `42762838986` (Fase H final), `42759043214` (Fase F/G).
 - `ci.yml` (setiap push): unit + integration + SpotBugs + JaCoCo. Target < 5 menit.
+- Uji lokal terakhir: **165 unit + 12 integration**, JaCoCo gate 50% terpenuhi.
 - `security-scan.yml` (mingguan/manual/perubahan `pom.xml`): OWASP Dependency-Check.
   - Tanpa secret `NVD_API_KEY`, scan **dilewati** (dependency-check mengunduh
     421.868 record NVD dan bisa 30–60 menit).
