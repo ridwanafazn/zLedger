@@ -303,8 +303,7 @@ class LedgerControllerTest {
 
     @Test
     @DisplayName("GET /transactions/{id} tidak ditemukan harus 404 problem+json")
-    void getTransaction_notFound_shouldReturn404() throws Exception {
-        UUID transactionId = UUID.randomUUID();
+    void getTransaction_notFound_shouldReturn404() throws Exception {        UUID transactionId = UUID.randomUUID();
 
         when(ledgerService.getTransaction(transactionId))
                 .thenThrow(new EntityNotFoundException("Transaksi tidak ditemukan: " + transactionId));
@@ -314,5 +313,32 @@ class LedgerControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("NOT_FOUND"))
                 .andExpect(jsonPath("$.type").exists())
                 .andExpect(jsonPath("$.instance").exists());
+    }
+
+    @Test
+    @DisplayName("POST /checkout duplikat idempotency harus 409, bukan 500")
+    void checkout_duplicateIdempotencyConstraint_shouldReturn409() throws Exception {
+        CheckoutRequest request = CheckoutRequest.builder()
+                .ownerId("cust-001")
+                .merchantId("merch-001")
+                .totalAmount(new BigDecimal("1000.00"))
+                .currency(Currency.IDR)
+                .idempotencyKey("idem-dup")
+                .tenders(List.of(TenderDetail.builder()
+                        .currency(Currency.IDR)
+                        .amount(new BigDecimal("1000.00"))
+                        .description("dup")
+                        .build()))
+                .build();
+
+        when(ledgerService.processMultiTenderPayment(any(CheckoutRequest.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique violation"));
+
+        mockMvc.perform(post("/api/v1/ledger/checkout")
+                        .header("X-Idempotency-Key", "idem-dup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errorCode").value("CONFLICT"));
     }
 }

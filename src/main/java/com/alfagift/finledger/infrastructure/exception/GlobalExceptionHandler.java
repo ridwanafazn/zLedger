@@ -4,6 +4,7 @@ import com.alfagift.finledger.infrastructure.IdempotencyRejectedException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -65,6 +66,16 @@ public class GlobalExceptionHandler {
             EntityNotFoundException ex, WebRequest request) {
         return build(HttpStatus.NOT_FOUND, "Resource Not Found",
                 ApiErrorCodes.NOT_FOUND, ex.getMessage(), null, request);
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetailResponse> handleDataIntegrity(
+            DataIntegrityViolationException ex, WebRequest request) {
+        log.warn("Pelanggaran constraint basis data: {}", ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.CONFLICT, "Data Conflict",
+                ApiErrorCodes.CONFLICT,
+                "Permintaan bertentangan dengan data yang sudah ada (kemungkinan duplikat)",
+                null, request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
