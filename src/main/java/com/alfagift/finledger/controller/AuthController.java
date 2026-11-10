@@ -3,8 +3,11 @@ package com.alfagift.finledger.controller;
 import com.alfagift.finledger.dto.AuthLoginRequest;
 import com.alfagift.finledger.dto.AuthLoginResponse;
 import com.alfagift.finledger.dto.RefreshTokenRequest;
+import com.alfagift.finledger.dto.RegisterRequest;
+import com.alfagift.finledger.dto.UserResponse;
 import com.alfagift.finledger.infrastructure.security.JwtService;
 import com.alfagift.finledger.infrastructure.security.RefreshTokenService;
+import com.alfagift.finledger.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -19,31 +22,45 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Map;
 
 /**
- * Endpoint autentikasi: login, refresh token, logout, dan identitas pengguna.
+ * Endpoint autentikasi: registrasi, login, refresh token, logout, dan identitas pengguna.
  */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-@Tag(name = "Auth", description = "Login, refresh token, dan identitas pengguna")
+@Tag(name = "Auth", description = "Registrasi, login, refresh token, dan identitas pengguna")
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final UserDetailsService userDetailsService;
+    private final UserService userService;
+
+    @PostMapping("/register")
+    @Operation(summary = "Registrasi pengguna baru",
+            description = "Membuat akun CUSTOMER. Role tidak dapat dipilih klien; " +
+                    "akun MERCHANT/ADMIN hanya dibuat lewat endpoint admin.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Registrasi berhasil"),
+            @ApiResponse(responseCode = "400", description = "Data tidak valid"),
+            @ApiResponse(responseCode = "409", description = "Username/email sudah dipakai")
+    })
+    public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.register(request));
+    }
 
     @PostMapping("/login")
     @Operation(summary = "Login", description = "Menukar username/password dengan access token JWT dan refresh token.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Login berhasil"),
-            @ApiResponse(responseCode = "401", description = "Kredensial salah")
+            @ApiResponse(responseCode = "401", description = "Kredensial salah atau akun nonaktif")
     })
     public ResponseEntity<AuthLoginResponse> login(@Valid @RequestBody AuthLoginRequest request) {
         try {
@@ -65,11 +82,22 @@ public class AuthController {
             description = "Menukar refresh token (sekali pakai) dengan access token + refresh token baru.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Token diperbarui"),
-            @ApiResponse(responseCode = "401", description = "Refresh token tidak valid/kedaluwarsa")
+            @ApiResponse(responseCode = "401", description = "Refresh token tidak valid/kedaluwarsa/akun nonaktif")
     })
     public ResponseEntity<AuthLoginResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         String username = refreshTokenService.consume(request.getRefreshToken());
-        UserDetails user = userDetailsService.loadUserByUsername(username);
+
+        UserDetails user;
+        try {
+            user = userDetailsService.loadUserByUsername(username);
+        } catch (UsernameNotFoundException ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Akun tidak lagi tersedia");
+        }
+
+        if (!user.isEnabled()) {
+            refreshTokenService.revokeAll(username);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Akun dinonaktifkan");
+        }
 
         List<String> roles = user.getAuthorities().stream()
                 .map(authority -> authority.getAuthority().replace("ROLE_", ""))
@@ -90,11 +118,10 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "Identitas saat ini", description = "Mengembalikan username dan role dari token aktif.")
-    public ResponseEntity<Map<String, Object>> me(Authentication authentication) {
-        return ResponseEntity.ok(Map.of(
-                "username", authentication.getName(),
-                "roles", rolesOf(authentication)));
+    @Operation(summary = "Identitas saat ini",
+            description = "Mengembalikan profil user (tanpa hash password) dari database.")
+    public ResponseEntity<UserResponse> me(Authentication authentication) {
+        return ResponseEntity.ok(userService.getByUsername(authentication.getName()));
     }
 
     private List<String> rolesOf(Authentication authentication) {

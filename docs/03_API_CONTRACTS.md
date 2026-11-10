@@ -15,8 +15,17 @@ All endpoints are prefixed with `/api/v1`.
 - `POST /ledger/transactions/{transactionId}/reverse`: Reversal/refund via compensating journal (ADMIN).
 - `GET /accounts/{accountId}/mutations`: Per-account audit history (paginated).
 - `POST /vouchers`, `GET /vouchers`, `GET /vouchers/{id}`, `PATCH /vouchers/{id}/status`, `POST /vouchers/{id}/redeem`.
-- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
+- `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
+- `POST /users`, `GET /users`, `GET /users/{id}`, `PATCH /users/{id}/status` (ADMIN).
+  Registrasi publik selalu membuat role CUSTOMER; role lain hanya lewat endpoint admin.
+  Menonaktifkan user mencabut refresh token dan access token aktifnya.
 - CORS: origin frontend diatur via `app.cors.allowed-origins`.
+
+## 1b. Aturan Idempotency per Endpoint
+
+`X-Idempotency-Key` wajib pada semua mutasi data, **kecuali** endpoint auth
+(`register`, `login`, `refresh`, `logout`) karena endpoint tersebut sudah
+idempoten secara alami (registrasi duplikat → `409`, rotasi token sekali pakai).
 
 ## 2. The Idempotency Promise
 Mobile devs MUST include the `X-Idempotency-Key` header on all `POST` and `PATCH` requests. 

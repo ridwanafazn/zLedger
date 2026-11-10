@@ -76,7 +76,8 @@ server:
     include-binding-errors: never
     include-stacktrace: never
 
-# --- Springdoc OpenAPI 3 (Swagger) ---springdoc:
+# --- Springdoc OpenAPI 3 (Swagger) ---
+springdoc:
   api-docs:
     path: /v3/api-docs
     enabled: true
@@ -100,6 +101,10 @@ app:
       # WAJIB diganti di produksi (minimal 32 byte)
       secret: ${JWT_SECRET:finledger-dev-secret-key-change-in-production-please}
       expiry-minutes: ${JWT_EXPIRY_MINUTES:60}
+      # Umur refresh token (disimpan di Redis, dirotasi sekali pakai)
+      refresh-ttl-days: ${REFRESH_TOKEN_TTL_DAYS:7}
+    # Data seed awal: hanya dipakai saat tabel app_users masih kosong/per user belum ada.
+    # Setelah itu, user dikelola lewat database (registrasi + endpoint admin).
     users:
       - username: admin
         password: ${ADMIN_PASSWORD:admin123}
@@ -111,7 +116,8 @@ app:
         password: ${CUSTOMER_PASSWORD:customer123}
         roles: [CUSTOMER]
 
-# --- Actuator (Production Monitoring) ---management:
+# --- Actuator (Production Monitoring) ---
+management:
   endpoints:
     web:
       exposure:

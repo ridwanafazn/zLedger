@@ -32,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final JwtService jwtService;
+    private final TokenRevocationService tokenRevocationService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -44,6 +45,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String token = header.substring(BEARER_PREFIX.length()).trim();
             try {
                 Claims claims = jwtService.parse(token);
+                if (tokenRevocationService.isRevoked(claims.getSubject())) {
+                    throw new IllegalStateException("Token telah dicabut");
+                }
                 List<SimpleGrantedAuthority> authorities = jwtService.extractRoles(claims).stream()
                         .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                         .toList();

@@ -32,3 +32,24 @@ The immutable movements (Debits/Credits).
 - `account_id` (UUID, FK)
 - `entry_type` (ENUM): DEBIT, CREDIT.
 - `amount` (DECIMAL 19,4)
+
+### Table: `app_users`
+User store for authentication (migration `V6`).
+- `id` (UUID, PK)
+- `username` (VARCHAR 64, UNIQUE, lowercase)
+- `password_hash` (VARCHAR 100): BCrypt, never returned by the API.
+- `email` (VARCHAR 255, UNIQUE, nullable)
+- `full_name` (VARCHAR 128, nullable)
+- `enabled` (BOOLEAN): disabling revokes refresh tokens and active access tokens (Redis).
+- `version` (BIGINT): JPA optimistic lock.
+
+### Table: `app_user_roles`
+RBAC roles per user (`ADMIN`, `MERCHANT`, `CUSTOMER`), composite PK `(user_id, role)`.
+Demo users are seeded once from `app.security.users` only when they do not exist yet.
+
+### Tables: `vouchers` & `voucher_redemptions`
+Voucher catalog with limited quota. Quota is decremented under `PESSIMISTIC_WRITE`
+so concurrent redeems cannot oversell; `(voucher_id, owner_id)` is unique so a
+user can redeem the same voucher only once.
+- `vouchers`: `code`, `points_cost`, `total_quota`, `remaining_quota`, period, status.
+- `voucher_redemptions`: link to voucher, owner, ledger `transaction_id`, points spent.

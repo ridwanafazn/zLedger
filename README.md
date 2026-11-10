@@ -131,9 +131,14 @@ http://localhost:8080/v3/api-docs
 
 ## Autentikasi & Otorisasi
 
-Semua endpoint (kecuali login dan dokumentasi) memerlukan JWT.
+Semua endpoint (kecuali registrasi, login, refresh, dan dokumentasi) memerlukan JWT.
 
 ```bash
+# 0) Registrasi pengguna baru (role otomatis CUSTOMER)
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"budi","password":"rahasia123","email":"budi@example.com"}'
+
 # 1) Login
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
@@ -144,13 +149,26 @@ curl http://localhost:8080/api/v1/ledger/accounts \
   -H "Authorization: Bearer <accessToken>"
 ```
 
+> Sejak Fase H, user disimpan di tabel `app_users` (BCrypt). Tiga akun demo
+> di-seed sekali saat startup bila belum ada, dan **tidak** menimpa user yang
+> sudah tersimpan. Password seed dapat ditimpa lewat environment
+> (`ADMIN_PASSWORD`, dst) dan `JWT_SECRET`.
+
 | Role | Akun demo | Izin |
 |------|-----------|------|
-| `ADMIN` | `admin` / `admin123` | Semua endpoint, termasuk `POST /accounts` dan `PATCH /status` |
+| `ADMIN` | `admin` / `admin123` | Semua endpoint, termasuk kelola user (`/api/v1/users/**`) |
 | `MERCHANT` | `merchant` / `merchant123` | Checkout & redeem |
 | `CUSTOMER` | `customer` / `customer123` | Checkout & redeem, baca data |
 
-> Kredensial demo dapat ditimpa lewat environment (`ADMIN_PASSWORD`, dst) dan `JWT_SECRET`.
+Mekanisme keamanan tambahan:
+
+- Password di-hash **BCrypt**, tidak pernah dikembalikan API.
+- Refresh token **opaque + rotasi sekali pakai** di Redis.
+- Menonaktifkan user (`PATCH /users/{id}/status`) mencabut **semua** refresh token
+  dan menandai access token aktif sebagai dicabut (Redis), sehingga akses berhenti
+  seketika — bukan menunggu JWT kedaluwarsa.
+- Registrasi publik tidak dapat memilih role (cegah privilege escalation).
+
 > Di Swagger UI, klik **Authorize** dan tempel token untuk mencoba endpoint terproteksi.
 > Error 401/403 juga berformat RFC 7807.
 
@@ -169,10 +187,15 @@ curl http://localhost:8080/api/v1/ledger/accounts \
 | `GET` | `/api/v1/ledger/transactions` | Daftar transaksi (filter `referenceType`, `accountId`, `from`, `to`) | ✅ |
 | `GET` | `/api/v1/ledger/transactions/{transactionId}` | Detail transaksi + entri debit/credit | ✅ |
 | `POST` | `/api/v1/ledger/transactions/{transactionId}/reverse` | Reversal via jurnal kompensasi (REFUND) | ✅ |
+| `POST` | `/api/v1/auth/register` | Registrasi user baru (CUSTOMER) | ✅ |
 | `POST` | `/api/v1/auth/login` | Login → access + refresh token | ✅ |
 | `POST` | `/api/v1/auth/refresh` | Rotasi refresh token | ✅ |
 | `POST` | `/api/v1/auth/logout` | Cabut refresh token | ✅ |
-| `GET` | `/api/v1/auth/me` | Identitas dari token aktif | ✅ |
+| `GET` | `/api/v1/auth/me` | Profil user dari database | ✅ |
+| `POST` | `/api/v1/users` | Buat user dengan role apa pun (ADMIN) | ✅ |
+| `GET` | `/api/v1/users` | Cari user (role/status/teks + pagination, ADMIN) | ✅ |
+| `GET` | `/api/v1/users/{userId}` | Detail user (ADMIN) | ✅ |
+| `PATCH` | `/api/v1/users/{userId}/status` | Aktifkan/nonaktifkan user (ADMIN) | ✅ |
 | `GET` | `/api/v1/ledger/accounts/{accountId}/mutations` | Mutasi akun (paginated) | ✅ |
 | `POST` | `/api/v1/vouchers` | Buat voucher (ADMIN) | ✅ |
 | `GET` | `/api/v1/vouchers` | Katalog voucher (filter + pagination) | ✅ |

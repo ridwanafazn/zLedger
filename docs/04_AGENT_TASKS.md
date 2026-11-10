@@ -26,9 +26,10 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] Sprint E lokal: reversal/refund, mutasi paginated, filter transaksi, CORS, refresh token.
 - [x] Fase F: CI green (docker `api.version`), JaCoCo >= 50% (aktual 80.9%), ArchUnit.
 - [x] Fase G: domain voucher (katalog, kuota atomik, anti-overselling, unique redeem).
+- [x] Fase H: user DB (`app_users` + role), registrasi publik, manajemen user admin,
+      revokasi access/refresh token saat user dinonaktifkan.
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Fase H: User DB + registrasi.
 - [ ] Fase I: Settlement & reconciliation.
 - [ ] Fase J: Blob storage / bukti bayar.
 - [ ] Fase K: Observability (Prometheus/Grafana).

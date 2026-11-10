@@ -47,14 +47,78 @@ class AuthControllerTest {
     @Mock
     private org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
 
+    @Mock
+    private com.alfagift.finledger.service.UserService userService;
+
     private AuthController authController;
 
     @BeforeEach
     void setUp() {
-        authController = new AuthController(authenticationManager, jwtService, refreshTokenService, userDetailsService);
+        authController = new AuthController(authenticationManager, jwtService, refreshTokenService,
+                userDetailsService, userService);
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    @DisplayName("Registrasi valid harus 201 dan mengembalikan profil tanpa password")
+    void register_shouldReturn201() throws Exception {
+        when(userService.register(any())).thenReturn(
+                com.alfagift.finledger.dto.UserResponse.builder()
+                        .id(java.util.UUID.randomUUID())
+                        .username("budi")
+                        .email("budi@example.com")
+                        .fullName("Budi")
+                        .enabled(true)
+                        .roles(List.of("CUSTOMER"))
+                        .build());
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "budi",
+                                  "password": "rahasia123",
+                                  "email": "budi@example.com",
+                                  "fullName": "Budi"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.username").value("budi"))
+                .andExpect(jsonPath("$.roles[0]").value("CUSTOMER"))
+                .andExpect(jsonPath("$.password").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("Registrasi dengan username terlalu pendek harus 400")
+    void register_invalidUsername_shouldReturn400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"ab\",\"password\":\"rahasia123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    @DisplayName("/me harus mengembalikan profil dari database")
+    void me_shouldReturnProfile() throws Exception {
+        when(userService.getByUsername("customer")).thenReturn(
+                com.alfagift.finledger.dto.UserResponse.builder()
+                        .username("customer")
+                        .fullName("Customer Demo")
+                        .enabled(true)
+                        .roles(List.of("CUSTOMER"))
+                        .build());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/auth/me")
+                        .principal(new UsernamePasswordAuthenticationToken(
+                                "customer", null,
+                                List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("customer"))
+                .andExpect(jsonPath("$.fullName").value("Customer Demo"));
     }
 
     @Test

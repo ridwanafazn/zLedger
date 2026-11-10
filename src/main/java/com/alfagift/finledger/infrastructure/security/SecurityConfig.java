@@ -10,11 +10,8 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -23,7 +20,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <p>
  * Matriks otorisasi:
  * <ul>
- *   <li>Publik: login, Swagger/OpenAPI, health/info</li>
+ *   <li>Publik: login, register, refresh, Swagger/OpenAPI, health/info</li>
+ *   <li>{@code /api/v1/users/**}: ADMIN</li>
  *   <li>{@code PATCH /accounts/*&#47;status} dan {@code POST /accounts}: ADMIN</li>
  *   <li>{@code POST /checkout} dan {@code POST /redeem}: CUSTOMER/MERCHANT/ADMIN</li>
  *   <li>Endpoint lain: wajib terautentikasi</li>
@@ -42,9 +40,11 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**", "/v3/api-docs/**",
-                                "/swagger-ui/**", "/swagger-ui.html",
+                        .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
+                                "/api/v1/auth/refresh",
+                                "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
                                 "/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/ledger/accounts").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/ledger/accounts/*/status").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/ledger/transactions/*/reverse").hasRole("ADMIN")
@@ -66,18 +66,6 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public UserDetailsService userDetailsService(SecurityUsersProperties properties,
-                                                 PasswordEncoder passwordEncoder) {
-        var users = properties.users().stream()
-                .map(user -> User.withUsername(user.username())
-                        .password(passwordEncoder.encode(user.password()))
-                        .roles(user.roles().toArray(String[]::new))
-                        .build())
-                .toArray(org.springframework.security.core.userdetails.User[]::new);
-        return new InMemoryUserDetailsManager(users);
     }
 
     @Bean

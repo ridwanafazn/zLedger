@@ -6,23 +6,29 @@ di atas FinLedger Engine, serta status kesiapannya.
 ## 1. Alur Autentikasi
 
 ```
+POST /api/v1/auth/register   → 201 { id, username, email, fullName, roles, enabled }
 POST /api/v1/auth/login      → { accessToken, refreshToken, expiresInSeconds, roles }
 POST /api/v1/auth/refresh    → { accessToken, refreshToken }  (rotasi, sekali pakai)
 POST /api/v1/auth/logout     → 204 (refresh token dicabut)
-GET  /api/v1/auth/me         → { username, roles }
+GET  /api/v1/auth/me         → { id, username, email, fullName, roles, enabled }
 ```
 
 Aturan untuk frontend:
 - Simpan `accessToken` di memori/secure storage, `refreshToken` di secure storage.
 - Panggil `/auth/refresh` saat access token mendekati kedaluwarsa (60 menit) atau saat menerima `401`.
-- Setiap `POST`/`PATCH` wajib mengirim `X-Idempotency-Key` (UUIDv4 baru per aksi user).
+- Setiap `POST`/`PATCH` mutasi data wajib mengirim `X-Idempotency-Key` (UUIDv4 baru per aksi user).
+  Pengecualian: `auth/register`, `auth/login`, `auth/refresh`, `auth/logout`.
+- Registrasi publik tidak bisa memilih role (selalu `CUSTOMER`).
+- Bila admin menonaktifkan akun, access token & refresh token langsung tidak berlaku.
 - Teruskan `X-Request-ID` dari response bila melapor bug (membantu tracing log).
 
 ## 2. Peta Kebutuhan Layar → Endpoint
 
 | Layar | Endpoint |
 |---|---|
+| Registrasi | `POST /auth/register` |
 | Login | `POST /auth/login` |
+| Profil | `GET /auth/me` |
 | Dashboard saldo | `GET /accounts/{id}/balance`, `GET /accounts?ownerId=` |
 | Riwayat mutasi (infinite scroll) | `GET /accounts/{id}/mutations?page=&size=` |
 | Daftar transaksi + filter tanggal/jenis | `GET /transactions?referenceType=&accountId=&from=&to=&page=&size=` |
@@ -31,6 +37,7 @@ Aturan untuk frontend:
 | Redeem voucher | `POST /ledger/redeem` |
 | Ajukan refund (admin) | `POST /transactions/{id}/reverse` |
 | Manajemen akun (admin) | `POST /accounts`, `PATCH /accounts/{id}/status` |
+| Manajemen user (admin) | `POST /users`, `GET /users`, `PATCH /users/{id}/status` |
 
 ## 3. Bentuk Response
 
@@ -69,7 +76,8 @@ Origin yang diizinkan diatur dengan `CORS_ALLOWED_ORIGINS`
 
 | Kebutuhan FE | Status |
 |---|---|
-| Registrasi user mandiri | ❌ belum (user inti dari konfigurasi) |
+| Registrasi user mandiri | ✅ (`POST /api/v1/auth/register`, role CUSTOMER) |
+| Manajemen user oleh admin | ✅ (`/api/v1/users`, nonaktif = token dicabut) |
 | Katalog voucher & redeem | ✅ (`/api/v1/vouchers`) |
 | Notifikasi/websocket status pembayaran | ❌ belum |
 | Endpoint upload bukti bayar | ❌ belum (rencana S3/MinIO) |
@@ -87,6 +95,6 @@ Origin yang diizinkan diatur dengan `CORS_ALLOWED_ORIGINS`
 - [x] Reversal (admin)
 - [x] CORS
 - [x] Error contract konsisten + correlation ID
-- [ ] Registrasi & manajemen user penuh
+- [x] Registrasi & manajemen user penuh
 - [x] Voucher catalog/quota
 - [ ] Upload bukti bayar
