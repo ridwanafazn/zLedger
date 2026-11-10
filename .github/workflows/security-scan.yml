@@ -1,0 +1,67 @@
+# ============================================================================
+# FinLedger Engine - Security Scan (OWASP Dependency-Check)
+#
+# Kenapa terpisah dari CI?
+# - Dependency-Check mengunduh seluruh database NVD (~421 ribu record).
+# - Tanpa NVD API key, NVD membatasi laju request sehingga scan bisa
+#   30-60+ menit. Tidak layak dijalankan pada setiap push.
+# - Workflow ini berjalan terjadwal (mingguan), manual, atau saat pom.xml berubah,
+#   dengan cache database agar run berikutnya cepat.
+# ============================================================================
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'   # setiap Senin 03:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'pom.xml'
+      - '.github/workflows/security-scan.yml'
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+    env:
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Cache dependency-check database
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.dependency-check-data
+            ~/.m2/repository/org/owasp
+          key: dependency-check-${{ runner.os }}-${{ hashFiles('pom.xml') }}
+          restore-keys: |
+            dependency-check-${{ runner.os }}-
+
+      - name: Run OWASP Dependency-Check
+        if: ${{ env.NVD_API_KEY != '' }}
+        run: >
+          mvn -B -Psecurity-scan -DskipTests -Djacoco.skip=true -Dspotbugs.skip=true
+          -DnvdApiKey="$NVD_API_KEY" verify
+
+      - name: Skip notice (nama secret belum diset)
+        if: ${{ env.NVD_API_KEY == '' }}
+        run: |
+          echo "::notice title=OWASP Dependency-Check dilewati::Tambahkan repository secret NVD_API_KEY untuk mengaktifkan scan. Tanpa key, unduhan NVD sangat lambat (30-60 menit)."
+
+      - name: Upload Dependency-Check report
+        if: ${{ env.NVD_API_KEY != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.html
+          if-no-files-found: ignore

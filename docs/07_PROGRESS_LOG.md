@@ -68,3 +68,13 @@
 | 2026-11-10 | Fase A–E selesai; 93 test hijau; push `80c9cbe` |
 | 2026-11-10 | Fase F: fix CI (`api.version=1.43`), JaCoCo 50% (aktual 80.9%), ArchUnit 4 rule, artefak laporan |
 | 2026-11-10 | Fase G: domain voucher (kuota atomik, unique redeem per user), 114 unit + 6 integration hijau, bukti 50 paralel kuota 10 |
+| 2026-11-10 | OWASP Dependency-Check dipindah ke `security-scan.yml` (mingguan/manual + cache + NVD_API_KEY) agar CI push tetap cepat |
+
+## Catatan CI
+
+- `ci.yml` (setiap push): unit + integration + SpotBugs + JaCoCo. Target < 5 menit.
+- `security-scan.yml` (mingguan/manual/perubahan `pom.xml`): OWASP Dependency-Check.
+  - Tanpa secret `NVD_API_KEY`, scan **dilewati** (dependency-check mengunduh
+    421.868 record NVD dan bisa 30–60 menit).
+  - Tambahkan secret `NVD_API_KEY` di repo untuk mengaktifkan.
+  - Database NVD dan plugin di-cache lewat `actions/cache`.

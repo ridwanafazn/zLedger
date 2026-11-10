@@ -105,10 +105,6 @@ jobs:
           path: target/site/jacoco/
           if-no-files-found: ignore
 
-      - name: OWASP Dependency-Check (advisory)
-        continue-on-error: true
-        run: mvn -B -Psecurity-scan -DskipTests verify
-
       - name: Build Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |

@@ -325,6 +325,8 @@
                         <configuration>
                             <failBuildOnCVSS>9</failBuildOnCVSS>
                             <skipProvidedScope>true</skipProvidedScope>
+                            <!-- Disimpan di home agar bisa di-cache CI; tanpa cache unduhan NVD sangat lama -->
+                            <dataDirectory>${user.home}/.dependency-check-data</dataDirectory>
                         </configuration>
                         <executions>
                             <execution>
