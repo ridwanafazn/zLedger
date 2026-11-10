@@ -31,3 +31,6 @@ Thumbs.db
 # Test coverage
 target/site/
 jacoco*.exec
+
+# Local scratch payloads
+test-account.json
