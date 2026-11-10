@@ -5,9 +5,6 @@
 # ============================================================================
 
 spring:
-  profiles:
-    active: prod
-
   datasource:
     hikari:
       maximum-pool-size: 30

@@ -75,6 +75,7 @@
 | 2026-11-10 | Fase G: domain voucher (kuota atomik, unique redeem per user), 114 unit + 6 integration hijau, bukti 50 paralel kuota 10 |
 | 2026-11-10 | OWASP Dependency-Check dipindah ke `security-scan.yml` (mingguan/manual + cache + NVD_API_KEY) agar CI push tetap cepat |
 | 2026-11-10 | Fase H: user DB (V6 `app_users`/`app_user_roles`), registrasi publik, CRUD user admin, revokasi token seketika, 135 unit + 8 integration hijau, coverage 86.5% |
+| 2026-11-10 | Fix config: `springdoc:`/`management:` yang termakan komentar di `application.yml`; hapus `spring.profiles.active` ilegal dari `application-prod.yml` (profil prod sudah diuji start & health UP) |
 
 ## Catatan CI
 
