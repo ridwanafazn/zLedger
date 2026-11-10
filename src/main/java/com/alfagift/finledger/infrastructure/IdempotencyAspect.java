@@ -8,6 +8,8 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -22,15 +24,21 @@ import java.util.function.Supplier;
  * Redis untuk kunci idempotency. Jika kunci sudah wujud, permintaan ditolak
  * dengan status {@code 409 Conflict}. Jika belum, kunci akan disimpan
  * dengan TTL dan method akan dilaksanakan.
+ * <p>
+ * Aspect ini dijalankan <b>di luar</b> transaksi database. Jika berjalan di dalam
+ * transaksi, kegagalan saat commit tidak akan tertangkap di sini sehingga kunci
+ * tetap tersimpan dan klien tidak bisa mencoba ulang.
  */
 @Aspect
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE + 10)
 @RequiredArgsConstructor
 @Slf4j
 public class IdempotencyAspect {
 
     private static final String IDEMPOTENCY_HEADER = "X-Idempotency-Key";
     private static final String REDIS_PREFIX = "finledger:idempotency:";
+    private static final long DEFAULT_TTL_SECONDS = 86_400;
 
     private final StringRedisTemplate redisTemplate;
 
@@ -40,7 +48,7 @@ public class IdempotencyAspect {
     @Around("@annotation(idempotent)")
     public Object around(ProceedingJoinPoint joinPoint, Idempotent idempotent) throws Throwable {
         String idempotencyKey = resolveIdempotencyKey(idempotent);
-        return checkIdempotency(idempotencyKey, joinPoint::proceed);
+        return checkIdempotency(idempotencyKey, idempotent.ttlSeconds(), joinPoint::proceed);
     }
 
     /**
@@ -50,6 +58,14 @@ public class IdempotencyAspect {
      * {@link IdempotencyRejectedException}. Jika method gagal, hapus kunci.
      */
     public Object checkIdempotency(String key, ThrowingSupplier proceed) throws Throwable {
+        return checkIdempotency(key, DEFAULT_TTL_SECONDS, proceed);
+    }
+
+    /**
+     * Varian dengan TTL eksplisit, dipakai oleh {@link #around} agar nilai
+     * {@link Idempotent#ttlSeconds()} benar-benar diterapkan.
+     */
+    public Object checkIdempotency(String key, long ttlSeconds, ThrowingSupplier proceed) throws Throwable {
         if (key == null || key.isBlank()) {
             // Tiada kunci idempotency — lalusi pemeriksaan
             return proceed.get();
@@ -57,7 +73,7 @@ public class IdempotencyAspect {
 
         String redisKey = REDIS_PREFIX + key;
         Boolean setIfAbsent = redisTemplate.opsForValue().setIfAbsent(redisKey, "1",
-                java.time.Duration.ofSeconds(86400));
+                java.time.Duration.ofSeconds(ttlSeconds));
 
         if (Boolean.FALSE.equals(setIfAbsent)) {
             log.warn("Duplicate idempotency key rejected: {}", key);
