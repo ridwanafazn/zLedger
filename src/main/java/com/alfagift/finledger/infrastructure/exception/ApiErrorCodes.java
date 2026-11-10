@@ -11,6 +11,9 @@ public class ApiErrorCodes {
     public static final String IDEMPOTENCY_REJECTED = "IDEMPOTENCY_REJECTED";
     public static final String NOT_FOUND = "NOT_FOUND";
     public static final String INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
+    public static final String INVALID_REQUEST = "INVALID_REQUEST";
+    public static final String MISSING_HEADER = "MISSING_HEADER";
+    public static final String CONFLICT = "CONFLICT";
 
     private ApiErrorCodes() {
     }

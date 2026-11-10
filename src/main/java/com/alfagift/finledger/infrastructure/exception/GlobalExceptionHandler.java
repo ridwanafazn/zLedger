@@ -5,111 +5,137 @@ import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
- * Penangani pengecualian global untuk semua REST controller.
+ * Penangani pengecualian global dengan format <b>RFC 7807 Problem Details</b>.
  * <p>
- * Menjamin format respons error seragam dan tidak bocorkan stack trace
- * kepada client (production-ready).
+ * Semua error dikembalikan sebagai {@code application/problem+json} dengan field
+ * standar {@code type, title, status, detail, instance} plus ekstensi
+ * {@code errorCode, timestamp, errors} agar klien mobile dapat menangani error
+ * secara deterministik tanpa mem-parsing string.
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
+    private static final String TYPE_BASE = "https://api.finledger.com/errors/";
+
     /**
-     * Format respons error standard.
+     * Representasi RFC 7807 dengan ekstensi proyek.
      */
-    public record ErrorResponse(
+    public record ProblemDetailResponse(
+            String type,
+            String title,
             int status,
-            String error,
-            String message,
+            String detail,
+            String instance,
+            String errorCode,
             LocalDateTime timestamp,
-            String path
+            List<String> errors
     ) {
     }
 
     @ExceptionHandler(InsufficientBalanceException.class)
-    public ResponseEntity<ErrorResponse> handleInsufficientBalance(
+    public ResponseEntity<ProblemDetailResponse> handleInsufficientBalance(
             InsufficientBalanceException ex, WebRequest request) {
-        return buildError(HttpStatus.BAD_REQUEST, "BALANCE_INSUFFICIENT", ex.getMessage(), request);
+        return build(HttpStatus.BAD_REQUEST, "Insufficient Balance",
+                ApiErrorCodes.BALANCE_INSUFFICIENT, ex.getReason(), null, request);
     }
 
     @ExceptionHandler(IdempotencyRejectedException.class)
-    public ResponseEntity<ErrorResponse> handleIdempotencyRejected(
+    public ResponseEntity<ProblemDetailResponse> handleIdempotencyRejected(
             IdempotencyRejectedException ex, WebRequest request) {
-        return buildError(HttpStatus.CONFLICT, "IDEMPOTENCY_REJECTED", ex.getMessage(), request);
+        return build(HttpStatus.CONFLICT, "Idempotency Conflict",
+                ApiErrorCodes.IDEMPOTENCY_REJECTED, ex.getReason(), null, request);
     }
 
     @ExceptionHandler(EntityNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(
+    public ResponseEntity<ProblemDetailResponse> handleNotFound(
             EntityNotFoundException ex, WebRequest request) {
-        return buildError(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), request);
+        return build(HttpStatus.NOT_FOUND, "Resource Not Found",
+                ApiErrorCodes.NOT_FOUND, ex.getMessage(), null, request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+    public ResponseEntity<ProblemDetailResponse> handleIllegalArgument(
             IllegalArgumentException ex, WebRequest request) {
-        return buildError(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", ex.getMessage(), request);
+        return build(HttpStatus.BAD_REQUEST, "Invalid Request",
+                ApiErrorCodes.INVALID_REQUEST, ex.getMessage(), null, request);
     }
 
     @ExceptionHandler(MissingRequestHeaderException.class)
-    public ResponseEntity<ErrorResponse> handleMissingHeader(
+    public ResponseEntity<ProblemDetailResponse> handleMissingHeader(
             MissingRequestHeaderException ex, WebRequest request) {
-        return buildError(HttpStatus.BAD_REQUEST, "MISSING_HEADER",
-                "Header wajib tidak ditemukan: " + ex.getHeaderName(), request);
+        return build(HttpStatus.BAD_REQUEST, "Missing Required Header",
+                ApiErrorCodes.MISSING_HEADER,
+                "Header wajib tidak ditemukan: " + ex.getHeaderName(), null, request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(
+    public ResponseEntity<ProblemDetailResponse> handleValidation(
             MethodArgumentNotValidException ex, WebRequest request) {
-        List<String> errors = ex.getBindingResult()
-                .getFieldErrors()
-                .stream()
+        List<String> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(err -> err.getField() + ": " + err.getDefaultMessage())
-                .collect(Collectors.toList());
-        return buildError(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
-                String.join("; ", errors), request);
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, "Validation Failed",
+                ApiErrorCodes.VALIDATION_ERROR, "Satu atau lebih field tidak valid", errors, request);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<ErrorResponse> handleResponseStatus(
+    public ResponseEntity<ProblemDetailResponse> handleResponseStatus(
             ResponseStatusException ex, WebRequest request) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
-        String error = ex.getReason() != null ? ex.getReason() : "ERROR";
-        return buildError(status, error, ex.getReason(), request);
+        String errorCode = switch (status) {
+            case NOT_FOUND -> ApiErrorCodes.NOT_FOUND;
+            case CONFLICT -> ApiErrorCodes.CONFLICT;
+            case BAD_REQUEST -> ApiErrorCodes.INVALID_REQUEST;
+            default -> status.is5xxServerError()
+                    ? ApiErrorCodes.INTERNAL_SERVER_ERROR : ApiErrorCodes.INVALID_REQUEST;
+        };
+        return build(status, status.getReasonPhrase(), errorCode,
+                ex.getReason() != null ? ex.getReason() : status.getReasonPhrase(), null, request);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneric(
-            Exception ex, WebRequest request) {
+    public ResponseEntity<ProblemDetailResponse> handleGeneric(Exception ex, WebRequest request) {
         log.error("Kesalahan tak tertangani: ", ex);
-        return buildError(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR",
-                "Terjadi kesalahan internal pada server", request);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",
+                ApiErrorCodes.INTERNAL_SERVER_ERROR,
+                "Terjadi kesalahan internal pada server", null, request);
     }
 
-    private ResponseEntity<ErrorResponse> buildError(
-            HttpStatus status, String error, String message, WebRequest request) {
-        ErrorResponse body = new ErrorResponse(
+    private ResponseEntity<ProblemDetailResponse> build(
+            HttpStatus status,
+            String title,
+            String errorCode,
+            String detail,
+            List<String> errors,
+            WebRequest request) {
+
+        ProblemDetailResponse body = new ProblemDetailResponse(
+                TYPE_BASE + errorCode.toLowerCase().replace('_', '-'),
+                title,
                 status.value(),
-                error,
-                message,
+                detail,
+                request.getDescription(false).replace("uri=", ""),
+                errorCode,
                 LocalDateTime.now(),
-                request.getDescription(false).replace("uri=", "")
+                errors
         );
-        return ResponseEntity.status(status).body(body);
+
+        return ResponseEntity.status(status)
+                .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                .body(body);
     }
 }

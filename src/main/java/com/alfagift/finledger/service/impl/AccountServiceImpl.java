@@ -133,7 +133,12 @@ public class AccountServiceImpl implements AccountService {
 
         Pageable pageable = buildPageable(page, size, sort);
 
-        Specification<Account> spec = buildSpecification(ownerId, currency, accountType, status);
+        // Validasi enum secara ketat: nilai tidak dikenal harus 400, bukan diabaikan diam-diam
+        Currency currencyFilter = parseEnum(Currency.class, "currency", currency);
+        AccountType typeFilter = parseEnum(AccountType.class, "accountType", accountType);
+        AccountStatus statusFilter = parseEnum(AccountStatus.class, "status", status);
+
+        Specification<Account> spec = buildSpecification(ownerId, currencyFilter, typeFilter, statusFilter);
         Page<Account> accountPage = accountRepository.findAll(spec, pageable);
 
         List<AccountResponse> content = accountPage.getContent().stream()
@@ -195,7 +200,7 @@ public class AccountServiceImpl implements AccountService {
     }
 
     private Specification<Account> buildSpecification(
-            String ownerId, String currency, String accountType, String status) {
+            String ownerId, Currency currency, AccountType accountType, AccountStatus status) {
 
         return (root, query, cb) -> {
             List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
@@ -203,31 +208,37 @@ public class AccountServiceImpl implements AccountService {
             if (ownerId != null && !ownerId.isBlank()) {
                 predicates.add(cb.equal(root.get("ownerId"), ownerId));
             }
-            if (currency != null && !currency.isBlank()) {
-                try {
-                    Currency curr = Currency.valueOf(currency);
-                    predicates.add(cb.equal(root.get("currency"), curr));
-                } catch (IllegalArgumentException ignored) {
-                    // invalid enum - ignore filter
-                }
+            if (currency != null) {
+                predicates.add(cb.equal(root.get("currency"), currency));
             }
-            if (accountType != null && !accountType.isBlank()) {
-                try {
-                    AccountType at = AccountType.valueOf(accountType);
-                    predicates.add(cb.equal(root.get("accountType"), at));
-                } catch (IllegalArgumentException ignored) {
-                }
+            if (accountType != null) {
+                predicates.add(cb.equal(root.get("accountType"), accountType));
             }
-            if (status != null && !status.isBlank()) {
-                try {
-                    AccountStatus st = AccountStatus.valueOf(status);
-                    predicates.add(cb.equal(root.get("status"), st));
-                } catch (IllegalArgumentException ignored) {
-                }
+            if (status != null) {
+                predicates.add(cb.equal(root.get("status"), status));
             }
 
             return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
         };
+    }
+
+    /**
+     * Mengubah nilai filter string menjadi enum secara ketat (case-insensitive).
+     * Nilai kosong menghasilkan {@code null} (filter tidak diterapkan).
+     *
+     * @throws IllegalArgumentException bila nilai tidak dikenal (dipetakan ke 400)
+     */
+    private <E extends Enum<E>> E parseEnum(Class<E> enumType, String field, String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return Enum.valueOf(enumType, raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Nilai %s tidak valid: '%s'. Pilihan yang tersedia: %s",
+                    field, raw, java.util.Arrays.toString(enumType.getEnumConstants())));
+        }
     }
 
     private Pageable buildPageable(int page, int size, String sort) {

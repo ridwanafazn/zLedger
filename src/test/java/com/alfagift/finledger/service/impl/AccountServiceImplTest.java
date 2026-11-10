@@ -452,12 +452,32 @@ class AccountServiceImplTest {
 
         @Test
         @DisplayName("Filter harus diteruskan ke specification (accountType, currency, status)")
-        void shouldBuildSpecificationWithAllFilters() {
-            givenPage(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
+        void shouldBuildSpecificationWithAllFilters() {            givenPage(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
 
             accountService.searchAccounts(OWNER_ID, "IDR", "LIABILITY", "ACTIVE", 0, 20, null);
 
             // Specification dibangun dan dipakai; nilai enum valid tidak boleh melempar exception
+            verify(accountRepository).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("Nilai enum tidak valid harus ditolak (400), bukan diabaikan")
+        void shouldRejectInvalidEnumFilter() {
+            assertThatThrownBy(() -> accountService.searchAccounts(
+                    null, null, "FOO", null, 0, 20, null))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("accountType");
+
+            verify(accountRepository, never()).findAll(any(Specification.class), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("Nilai enum boleh dikirim dengan huruf kecil")
+        void shouldAcceptCaseInsensitiveEnum() {
+            givenPage(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt")));
+
+            accountService.searchAccounts(null, "idr", "liability", "active", 0, 20, null);
+
             verify(accountRepository).findAll(any(Specification.class), any(Pageable.class));
         }
     }
