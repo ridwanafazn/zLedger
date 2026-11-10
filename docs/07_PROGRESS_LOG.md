@@ -93,6 +93,7 @@
 | 2026-11-10 | Fase I: settlement merchant (V8 `merchant_settlements`/`settlement_items`) + rekonsiliasi audit (V7 `opening_balance`, `reference_type.SETTLEMENT`), endpoint ADMIN, 165 unit + 12 integration hijau, smoke HTTP 15/15 lulus |
 | 2026-11-10 | Fase J: bukti bayar (V9 `payment_proofs`), port `BlobStorage` (local/S3), validasi magic bytes + SHA-256, streaming unduh, presigned URL; smoke 21/21 lulus (termasuk jalur S3 nyata ke S3Mock) |
 | 2026-11-10 | Fase K: Micrometer Prometheus (`/actuator/prometheus`), 12 panel Grafana auto-provisioned, metrik bisnis settlement/rekonsiliasi/bukti bayar, Prometheus target UP |
+| 2026-11-10 | Fix config: `application-dev.yml` menimpa `management.endpoints.web.exposure.include` tanpa `prometheus` (CI `SPRING_PROFILES_ACTIVE=dev` mengembalikan 500 pada `/actuator/prometheus`); ditangkap CI run `42772889107` |
 
 ## Catatan CI
 

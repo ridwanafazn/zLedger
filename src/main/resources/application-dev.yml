@@ -32,4 +32,4 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,env
+        include: health,info,metrics,prometheus,env
