@@ -14,7 +14,7 @@ import com.alfagift.finledger.dto.CheckoutResponse;
 import com.alfagift.finledger.dto.CheckoutRequest.TenderDetail;
 import com.alfagift.finledger.infrastructure.AccountInactiveException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
-import com.alfagift.finledger.infrastructure.kafka.LoyaltyPointsProducer;
+import com.alfagift.finledger.infrastructure.outbox.OutboxService;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -67,7 +68,7 @@ class LedgerServiceImplTest {
     private LedgerEntryRepository ledgerEntryRepository;
 
     @Mock
-    private LoyaltyPointsProducer loyaltyPointsProducer;
+    private OutboxService outboxService;
 
     @InjectMocks
     private LedgerServiceImpl ledgerService;
@@ -184,7 +185,7 @@ class LedgerServiceImplTest {
         assertThat(totalDebit).isEqualByComparingTo(new BigDecimal("50000.00"));
 
         // Then - Kafka NOT called (no A_POIN involved)
-        verify(loyaltyPointsProducer, never()).sendPointsAwarded(any());
+        verify(outboxService, never()).enqueue(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -240,9 +241,10 @@ class LedgerServiceImplTest {
         // Then
         assertThat(response.getStatus()).isEqualTo("SUCCESS");
 
-        // Kafka event should be sent
+        // Event harus didaftarkan ke outbox (bukan langsung ke Kafka)
         ArgumentCaptor<PointsAwardedEvent> eventCaptor = ArgumentCaptor.forClass(PointsAwardedEvent.class);
-        verify(loyaltyPointsProducer, times(1)).sendPointsAwarded(eventCaptor.capture());
+        verify(outboxService, times(1)).enqueue(
+                eq("JOURNAL_TRANSACTION"), anyString(), eq("POINTS_AWARDED"), eventCaptor.capture());
         PointsAwardedEvent event = eventCaptor.getValue();
         assertThat(event.getOwnerId()).isEqualTo("cust-001");
         assertThat(event.getCurrency()).isEqualTo(Currency.A_POIN);
@@ -279,7 +281,7 @@ class LedgerServiceImplTest {
         // No journal should be saved
         verify(journalTransactionRepository, never()).save(any());
         verify(accountRepository, never()).save(any());
-        verify(loyaltyPointsProducer, never()).sendPointsAwarded(any());
+        verify(outboxService, never()).enqueue(anyString(), anyString(), anyString(), any());
     }
 
     @Test
@@ -383,23 +385,21 @@ class LedgerServiceImplTest {
                 .thenReturn(Optional.of(customerAccount));
         when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
                 .thenReturn(Optional.of(merchantAccount));
-        when(accountRepository.findByIdForUpdate(customerId)).thenReturn(Optional.of(customerAccount));
-        when(accountRepository.findByIdForUpdate(merchantId)).thenReturn(Optional.of(merchantAccount));
         when(journalTransactionRepository.save(any(JournalTransaction.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(accountRepository.save(any(Account.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        UUID firstExpected = customerId.compareTo(merchantId) <= 0 ? customerId : merchantId;
-        UUID secondExpected = firstExpected.equals(customerId) ? merchantId : customerId;
+        Account firstExpected = customerId.compareTo(merchantId) <= 0 ? customerAccount : merchantAccount;
+        Account secondExpected = firstExpected.equals(customerAccount) ? merchantAccount : customerAccount;
 
         // When
         ledgerService.processMultiTenderPayment(request);
 
         // Then — urutan lock mengikuti compareTo UUID, bukan urutan bisnis
         org.mockito.InOrder inOrder = inOrder(accountRepository);
-        inOrder.verify(accountRepository).findByIdForUpdate(firstExpected);
-        inOrder.verify(accountRepository).findByIdForUpdate(secondExpected);
+        inOrder.verify(accountRepository).lockForUpdate(firstExpected);
+        inOrder.verify(accountRepository).lockForUpdate(secondExpected);
     }
 
     @Test

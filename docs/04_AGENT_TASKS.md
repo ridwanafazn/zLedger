@@ -20,9 +20,11 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] `GET /transactions` and `GET /transactions/{id}`.
 - [x] Kafka healthcheck fixed; integration tests isolated via Failsafe.
 - [x] Spring Security + JWT + RBAC (`/api/v1/auth/login`, role ADMIN/MERCHANT/CUSTOMER).
+- [x] Transactional Outbox untuk reliabilitas Kafka.
+- [x] k6 + harness konkurensi lokal; bukti di `docs/05_LOAD_TEST_PROOFS.md`.
+- [x] SpotBugs + OWASP Dependency-Check profile di CI.
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Transactional Outbox for Kafka reliability.
-- [ ] Actuator Custom Metrics (TPS, Error Rates) & dashboards.
 - [ ] Reversal/Refund Ledger Logic.
-- [ ] k6 load test proofs (docs/05).
+- [ ] Actuator dashboards (Prometheus/Grafana).
+- [ ] Database-backed user store + refresh token.

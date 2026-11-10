@@ -3,6 +3,7 @@ package com.alfagift.finledger.repository;
 import com.alfagift.finledger.domain.entities.Account;
 import com.alfagift.finledger.domain.enums.Currency;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Repository;
@@ -40,5 +41,27 @@ public class AccountRepositoryCustomImpl implements AccountRepositoryCustom {
         Query query = entityManager.createNativeQuery(sql);
         query.setParameter(1, ownerId);
         return (Boolean) query.getSingleResult();
+    }
+
+    @Override
+    public void lockForUpdate(Account account) {
+        UUID id = account.getId();
+        // Lepaskan instance lama, lalu muat ulang dengan pessimistic write lock
+        // supaya state dan versi benar-benar terbaru (menghindari optimistic failure).
+        entityManager.detach(account);
+        Account fresh = entityManager.find(Account.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (fresh == null) {
+            throw new jakarta.persistence.EntityNotFoundException("Akun tidak ditemukan: " + id);
+        }
+        // Salin state terbaru kembali ke instance milik pemanggil.
+        account.setOwnerId(fresh.getOwnerId());
+        account.setAccountName(fresh.getAccountName());
+        account.setAccountType(fresh.getAccountType());
+        account.setCurrency(fresh.getCurrency());
+        account.setBalance(fresh.getBalance());
+        account.setStatus(fresh.getStatus());
+        account.setVersion(fresh.getVersion());
+        account.setCreatedAt(fresh.getCreatedAt());
+        account.setUpdatedAt(fresh.getUpdatedAt());
     }
 }

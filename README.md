@@ -205,6 +205,26 @@ mvn verify
 > Unit test dijalankan oleh Surefire; integration test (`*IntegrationTest`) oleh Failsafe
 > pada fase `verify`, sehingga `mvn test` tetap hijau tanpa Docker.
 
+### Load test & static analysis
+
+```bash
+# Harness konkurensi lokal (butuh aplikasi + docker compose aktif)
+powershell -ExecutionPolicy Bypass -File loadtest/local-loadtest.ps1 -Parallel 50
+
+# Skrip k6 (jika tersedia)
+k6 run -e VUS=50 -e ITERATIONS=200 loadtest/k6/flash-sale.js
+
+# Laporan SpotBugs (dihasilkan saat mvn verify)
+mvn -DskipTests verify
+# → target/spotbugsXml.xml
+
+# OWASP Dependency-Check (advisory, unduh database NVD)
+mvn -Psecurity-scan -DskipTests verify
+```
+
+Hasil pengukuran nyata (flash sale race, retry storm, outbox) ada di
+[`docs/05_LOAD_TEST_PROOFS.md`](docs/05_LOAD_TEST_PROOFS.md).
+
 Laporan ujian akan ditimpan di `target/surefire-reports/`.
 
 ---

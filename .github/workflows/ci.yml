@@ -43,11 +43,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 25
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 25
+          java-version: 21
           cache: maven
 
       - name: Validate Maven wrapper / Maven version
@@ -65,14 +65,37 @@ jobs:
           REDIS_PASSWORD: ""
           KAFKA_BOOTSTRAP_SERVERS: localhost:9092
           SPRING_PROFILES_ACTIVE: dev
+          JWT_SECRET: ci-only-secret-key-with-at-least-32-bytes-1234
+          ADMIN_PASSWORD: admin123
+          MERCHANT_PASSWORD: merchant123
+          CUSTOMER_PASSWORD: customer123
         run: mvn clean verify -B
 
-      - name: Upload test results
+      - name: Upload unit test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: unit-test-results
           path: target/surefire-reports/
+
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: target/failsafe-reports/
+
+      - name: Upload SpotBugs report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: target/spotbugsXml.xml
+          if-no-files-found: ignore
+
+      - name: OWASP Dependency-Check (advisory)
+        continue-on-error: true
+        run: mvn -B -Psecurity-scan -DskipTests verify
 
       - name: Build Docker image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

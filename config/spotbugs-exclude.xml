@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Lombok generates boilerplate that SpotBugs may misread -->
+    <Match>
+        <Source name="~.*\.java"/>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- JPA entities intentionally expose mutable collections -->
+    <Match>
+        <Package name="com.alfagift.finledger.domain.entities"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <!-- DTO classes are simple carriers -->
+    <Match>
+        <Package name="com.alfagift.finledger.dto"/>
+    </Match>
+</FindBugsFilter>

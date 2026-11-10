@@ -14,4 +14,13 @@ public interface AccountRepositoryCustom {
     Optional<Account> findAccountByOwnerIdAndCurrencyCustom(String ownerId, Currency currency);
 
     boolean existsAccountByOwnerIdAndCurrencyCustom(String ownerId, Currency currency);
+
+    /**
+     * Mengunci baris akaun dengan {@code SELECT ... FOR UPDATE} sekaligus
+     * me-refresh state entity dari database (versi terbaru), sehingga
+     * pengecekan optimistic lock tidak memakai data basi.
+     *
+     * @param account entity yang sudah managed
+     */
+    void lockForUpdate(Account account);
 }

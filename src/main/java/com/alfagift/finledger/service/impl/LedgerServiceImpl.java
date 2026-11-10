@@ -17,7 +17,7 @@ import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.AccountInactiveException;
 import com.alfagift.finledger.infrastructure.Idempotent;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
-import com.alfagift.finledger.infrastructure.kafka.LoyaltyPointsProducer;
+import com.alfagift.finledger.infrastructure.outbox.OutboxService;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
@@ -59,7 +59,7 @@ public class LedgerServiceImpl implements LedgerService {
     private final AccountRepository accountRepository;
     private final JournalTransactionRepository journalTransactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
-    private final LoyaltyPointsProducer loyaltyPointsProducer;
+    private final OutboxService outboxService;
 
     @Override
     @Transactional
@@ -136,7 +136,9 @@ public class LedgerServiceImpl implements LedgerService {
                     .awardedAt(LocalDateTime.now())
                     .description("Hadiah A_Poin untuk pembayaran multi-tender")
                     .build();
-            loyaltyPointsProducer.sendPointsAwarded(event);
+            // Ditulis ke outbox dalam transaksi yang sama; relay akan mengirim ke Kafka
+            outboxService.enqueue("JOURNAL_TRANSACTION", journal.getId().toString(),
+                    "POINTS_AWARDED", event);
         }
 
         return CheckoutResponse.builder()
@@ -338,22 +340,23 @@ public class LedgerServiceImpl implements LedgerService {
      * Urutan yang konsisten untuk semua transaksi mencegah deadlock ketika dua
      * transaksi menyentuh pasangan akaun yang sama dengan arah berbeda.
      * <p>
-     * Akaun yang baru dibuat di transaksi ini ({@code version == null}, belum
-     * pernah di-flush) dilewati karena belum terlihat oleh transaksi lain.
+     * {@code flush()} diperlukan agar akaun yang baru dibuat pada transaksi ini
+     * sudah memiliki row sebelum di-refresh dengan pessimistic lock (Hibernate
+     * sudah mengisi {@code version=0} sebelum insert).
      */
     private void lockAccountsForUpdate(Account... accounts) {
-        List<UUID> ids = java.util.Arrays.stream(accounts)
+        List<Account> targets = java.util.Arrays.stream(accounts)
                 .filter(java.util.Objects::nonNull)
-                .filter(account -> account.getVersion() != null)
-                .map(Account::getId)
                 .distinct()
-                .sorted()
+                .sorted(java.util.Comparator.comparing(Account::getId))
                 .toList();
 
-        for (UUID id : ids) {
-            accountRepository.findByIdForUpdate(id)
-                    .orElseThrow(() -> new EntityNotFoundException("Akun tidak ditemukan: " + id));
+        if (targets.isEmpty()) {
+            return;
         }
+
+        accountRepository.flush();
+        targets.forEach(accountRepository::lockForUpdate);
     }
 
     /**
