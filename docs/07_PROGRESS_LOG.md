@@ -25,7 +25,7 @@
 | E | Reversal, mutasi paginated, filter, CORS, refresh token | ✅ | `80c9cbe` |
 | F | CI green + quality gate (JaCoCo, ArchUnit) | ✅ | `72a3251` + perbaikan `api.version` |
 | G | Domain voucher & flash sale nyata | ✅ | commit Fase G |
-| H | User DB + registrasi + revokasi token | ✅ | commit Fase H |
+| H | User DB + registrasi + revokasi token | ✅ | `231c7a8` |
 | I | Settlement & reconciliation | ⏳ | — |
 | J | Blob storage / bukti bayar | ⏳ | — |
 | K | Observability (Prometheus/Grafana) | ⏳ | — |
@@ -78,8 +78,8 @@
 
 ## Catatan CI
 
-- **Status: hijau** (run `42759043214`, 5m1s) dengan artefak unit test,
-  integration test, SpotBugs, dan JaCoCo.
+- **Status: hijau** (run `42762128490`, 4m52s) untuk commit Fase H `231c7a8`.
+- Run hijau sebelumnya: `42759043214` (Fase F/G).
 - `ci.yml` (setiap push): unit + integration + SpotBugs + JaCoCo. Target < 5 menit.
 - `security-scan.yml` (mingguan/manual/perubahan `pom.xml`): OWASP Dependency-Check.
   - Tanpa secret `NVD_API_KEY`, scan **dilewati** (dependency-check mengunduh
