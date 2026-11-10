@@ -9,7 +9,8 @@
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis)](https://redis.io/)
 [![Apache Kafka](https://img.shields.io/badge/Kafka-4.x-231F2D?logo=apache-kafka)](https://kafka.apache.org/)
 [![Maven](https://img.shields.io/badge/Maven-3.10+-C71A36?logo=apache-maven)](https://maven.apache.org/)
-[![CI](https://img.shields.io/github/actions/workflow/status/ridwan/finledger-engine/ci.yml?label=CI)](https://github.com/ridwan/finledger-engine/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/ridwanafazn/zLedger/ci.yml?label=CI)](https://github.com/ridwanafazn/zLedger/actions/workflows/ci.yml)
+[![Security Scan](https://img.shields.io/github/actions/workflow/status/ridwanafazn/zLedger/security-scan.yml?label=security)](https://github.com/ridwanafazn/zLedger/actions/workflows/security-scan.yml)
 
 ---
 

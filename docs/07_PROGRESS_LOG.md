@@ -72,6 +72,8 @@
 
 ## Catatan CI
 
+- **Status: hijau** (run `42759043214`, 5m1s) dengan artefak unit test,
+  integration test, SpotBugs, dan JaCoCo.
 - `ci.yml` (setiap push): unit + integration + SpotBugs + JaCoCo. Target < 5 menit.
 - `security-scan.yml` (mingguan/manual/perubahan `pom.xml`): OWASP Dependency-Check.
   - Tanpa secret `NVD_API_KEY`, scan **dilewati** (dependency-check mengunduh
