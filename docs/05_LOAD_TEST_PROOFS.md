@@ -117,7 +117,7 @@ pengecekan + pengurangan kuota, sehingga tidak terjadi overselling meski
 
 - Pengujian dijalankan pada satu mesin lokal (bukan cluster), sehingga angka
   throughput bukan benchmark produksi.
-- Voucher quota belum dimodelkan; skenario flash sale menguji kapasitas saldo.
+- Voucher sudah dimodelkan; skenario 5 menguji kuota nyata.
 - Skenario 1.000 VU seperti rencana awal memerlukan k6 dan lingkungan terpisah
   (lihat `loadtest/k6/` untuk skrip yang siap dijalankan di CI/load generator).
 

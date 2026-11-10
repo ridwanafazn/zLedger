@@ -47,9 +47,10 @@
 
 - Java 21 (Temurin), Maven 3.10, Docker Desktop 29.
 - PostgreSQL 16, Redis 7, Kafka 3.8 (KRaft) via `docker-compose.yml`.
-- Testcontainers lokal gagal karena Docker Desktop 29 menolak API lama;
-  CI memakai `DOCKER_API_VERSION=1.43`.
-- k6 tidak tersedia; harness `loadtest/local-loadtest.ps1` dipakai.
+- Testcontainers kini berjalan lokal **dan** di CI dengan system property
+  `api.version=1.43` (Docker modern menolak API < 1.40).
+- k6 tidak tersedia; harness `loadtest/local-loadtest.ps1` dan
+  `loadtest/voucher-loadtest.ps1` dipakai untuk bukti konkurensi.
 
 ## Known Issues / Utang Teknis
 
