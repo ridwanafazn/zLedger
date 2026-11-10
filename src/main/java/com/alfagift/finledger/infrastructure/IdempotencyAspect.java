@@ -1,33 +1,44 @@
 package com.alfagift.finledger.infrastructure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.http.HttpStatus;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.util.UUID;
-import java.util.function.Supplier;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.HexFormat;
 
 /**
- * AOP aspect untuk melaksanakan idempotency menggunakan Redis.
+ * AOP aspect untuk idempotency berbasis Redis.
  * <p>
- * Setiap method yang di-annotasi dengan {@link Idempotent} akan memeriksa
- * Redis untuk kunci idempotency. Jika kunci sudah wujud, permintaan ditolak
- * dengan status {@code 409 Conflict}. Jika belum, kunci akan disimpan
- * dengan TTL dan method akan dilaksanakan.
+ * Semantik yang diterapkan:
+ * <ol>
+ *   <li><b>Request pertama</b> dengan kunci unik diproses, lalu respons sukses
+ *       disimpan sebagai cache bersama fingerprint payload.</li>
+ *   <li><b>Retry identik</b> (kunci sama, payload sama) mengembalikan respons
+ *       yang tersimpan — bukan 409 — sehingga klien mobile aman mengulang.</li>
+ *   <li><b>Kunci sama dengan payload berbeda</b> ditolak {@code 409 Conflict}.</li>
+ *   <li><b>Kunci yang masih diproses</b> (belum ada respons) juga 409 agar klien retry nanti.</li>
+ *   <li><b>Method gagal</b> menghapus kunci sehingga klien boleh mencoba lagi.</li>
+ * </ol>
+ * Kunci di-scope per operasi ({@code Class.method}) untuk mencegah tabrakan
+ * ketika klien memakai kunci yang sama pada endpoint berbeda.
  * <p>
- * Aspect ini dijalankan <b>di luar</b> transaksi database. Jika berjalan di dalam
- * transaksi, kegagalan saat commit tidak akan tertangkap di sini sehingga kunci
- * tetap tersimpan dan klien tidak bisa mencoba ulang.
+ * Aspect dijalankan <b>di luar</b> transaksi database agar kegagalan saat commit
+ * juga menghapus kunci.
  */
 @Aspect
 @Component
@@ -39,8 +50,10 @@ public class IdempotencyAspect {
     private static final String IDEMPOTENCY_HEADER = "X-Idempotency-Key";
     private static final String REDIS_PREFIX = "finledger:idempotency:";
     private static final long DEFAULT_TTL_SECONDS = 86_400;
+    private static final String SEPARATOR = "\n";
 
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     /**
      * Intercept method yang di-annotasi {@link Idempotent}.
@@ -48,51 +61,121 @@ public class IdempotencyAspect {
     @Around("@annotation(idempotent)")
     public Object around(ProceedingJoinPoint joinPoint, Idempotent idempotent) throws Throwable {
         String idempotencyKey = resolveIdempotencyKey(idempotent);
-        return checkIdempotency(idempotencyKey, idempotent.ttlSeconds(), joinPoint::proceed);
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            return joinPoint.proceed();
+        }
+
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String scope = signature.getDeclaringType().getSimpleName() + "." + signature.getName();
+        String fingerprint = fingerprint(joinPoint.getArgs());
+
+        return execute(scope, idempotencyKey, idempotent.ttlSeconds(), fingerprint,
+                signature.getReturnType(), joinPoint::proceed);
     }
 
     /**
-     * Method publik untuk ujian unit — memeriksa kunci idempotency tanpa AOP proxy.
-     * <p>
-     * Jika kunci baru, simpan di Redis dan lanjutkan. Jika duplikat, lempar
-     * {@link IdempotencyRejectedException}. Jika method gagal, hapus kunci.
+     * Varian legacy tanpa scoping/caching (dipakai uji unit level rendah).
      */
     public Object checkIdempotency(String key, ThrowingSupplier proceed) throws Throwable {
         return checkIdempotency(key, DEFAULT_TTL_SECONDS, proceed);
     }
 
-    /**
-     * Varian dengan TTL eksplisit, dipakai oleh {@link #around} agar nilai
-     * {@link Idempotent#ttlSeconds()} benar-benar diterapkan.
-     */
     public Object checkIdempotency(String key, long ttlSeconds, ThrowingSupplier proceed) throws Throwable {
+        return execute(null, key, ttlSeconds, "", null, proceed);
+    }
+
+    /**
+     * Inti idempotency: acquire kunci, cache respons, dan layani retry.
+     *
+     * @param scope       identitas operasi (mis. {@code AccountServiceImpl.createAccount}); null untuk legacy
+     * @param key         nilai header {@code X-Idempotency-Key}
+     * @param ttlSeconds  masa hidup kunci
+     * @param fingerprint hash payload request
+     * @param returnType  tipe respons untuk deserialisasi cache (null = tidak cache)
+     * @param proceed     aksi bisnis
+     */
+    public Object execute(String scope, String key, long ttlSeconds, String fingerprint,
+                          Class<?> returnType, ThrowingSupplier proceed) throws Throwable {
         if (key == null || key.isBlank()) {
-            // Tiada kunci idempotency — lalusi pemeriksaan
             return proceed.get();
         }
 
-        String redisKey = REDIS_PREFIX + key;
-        Boolean setIfAbsent = redisTemplate.opsForValue().setIfAbsent(redisKey, "1",
-                java.time.Duration.ofSeconds(ttlSeconds));
+        String redisKey = redisKey(scope, key);
+        String storedFingerprint = fingerprint == null ? "" : fingerprint;
 
-        if (Boolean.FALSE.equals(setIfAbsent)) {
-            log.warn("Duplicate idempotency key rejected: {}", key);
-            throw new IdempotencyRejectedException("Permintaan duplikat dengan kunci: " + key);
+        Boolean acquired = redisTemplate.opsForValue()
+                .setIfAbsent(redisKey, storedFingerprint, Duration.ofSeconds(ttlSeconds));
+
+        if (Boolean.TRUE.equals(acquired)) {
+            try {
+                Object result = proceed.get();
+                cacheResponse(redisKey, storedFingerprint, result, returnType, ttlSeconds);
+                return result;
+            } catch (Throwable ex) {
+                // Gagal: hapus kunci agar klien boleh mencoba lagi
+                redisTemplate.delete(redisKey);
+                throw ex;
+            }
         }
 
+        String stored = redisTemplate.opsForValue().get(redisKey);
+
+        if (stored != null && stored.startsWith(storedFingerprint + SEPARATOR)) {
+            String cachedJson = stored.substring((storedFingerprint + SEPARATOR).length());
+            if (returnType != null && !cachedJson.isBlank()) {
+                log.info("Mengembalikan respons idempotent dari cache untuk key={}", key);
+                return objectMapper.readValue(cachedJson, returnType);
+            }
+        }
+
+        if (stored != null && storedFingerprint.equals(stored)) {
+            throw new IdempotencyRejectedException(
+                    "Permintaan dengan kunci " + key + " sedang diproses. Silakan coba lagi.");
+        }
+
+        log.warn("Duplicate idempotency key rejected (payload berbeda): {}", key);
+        throw new IdempotencyRejectedException(
+                "Kunci idempotency " + key + " sudah digunakan untuk permintaan lain");
+    }
+
+    private void cacheResponse(String redisKey, String fingerprint, Object result,
+                               Class<?> returnType, long ttlSeconds) {
+        if (returnType == null || result == null) {
+            return;
+        }
         try {
-            return proceed.get();
-        } catch (Throwable ex) {
-            // Hapus kunci jika method gagal supaya klien boleh cuba lagi
-            redisTemplate.delete(redisKey);
-            throw ex;
+            String json = objectMapper.writeValueAsString(result);
+            redisTemplate.opsForValue()
+                    .set(redisKey, fingerprint + SEPARATOR + json, Duration.ofSeconds(ttlSeconds));
+        } catch (Exception ex) {
+            log.warn("Gagal menyimpan cache respons idempotent: {}", ex.getMessage());
+        }
+    }
+
+    private String redisKey(String scope, String key) {
+        if (scope == null || scope.isBlank()) {
+            return REDIS_PREFIX + key;
+        }
+        return REDIS_PREFIX + scope + ":" + key;
+    }
+
+    /**
+     * Hash SHA-256 dari argumen method, sehingga retry dengan payload berbeda
+     * dapat dibedakan dari retry identik.
+     */
+    private String fingerprint(Object[] args) {
+        try {
+            byte[] payload = objectMapper.writeValueAsBytes(args);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(payload));
+        } catch (Exception ex) {
+            log.warn("Fingerprint payload gagal dibuat, fallback ke hashCode: {}", ex.getMessage());
+            return Integer.toHexString(java.util.Arrays.deepHashCode(args));
         }
     }
 
     /**
      * Functional interface yang membenarkan checked/throwable exception.
-     * Digunakan supaya {@link ProceedingJoinPoint#proceed()} boleh diteruskan
-     * tanpa kesilapan kompilasi.
      */
     @FunctionalInterface
     public interface ThrowingSupplier {
@@ -100,12 +183,10 @@ public class IdempotencyAspect {
     }
 
     private String resolveIdempotencyKey(Idempotent idempotent) {
-        // Jika annotation menentukan key secara eksplik, gunakan itu
         if (!idempotent.key().isBlank()) {
             return idempotent.key();
         }
 
-        // Ambil dari header HTTP X-Idempotency-Key
         var attributes = RequestContextHolder.getRequestAttributes();
         if (attributes instanceof ServletRequestAttributes sra) {
             HttpServletRequest request = sra.getRequest();

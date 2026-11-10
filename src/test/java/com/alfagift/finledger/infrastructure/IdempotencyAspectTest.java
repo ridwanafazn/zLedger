@@ -7,6 +7,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.alfagift.finledger.dto.AccountResponse;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -49,7 +51,7 @@ class IdempotencyAspectTest {
 
     @BeforeEach
     void setUp() {
-        aspect = new IdempotencyAspect(redisTemplate);
+        aspect = new IdempotencyAspect(redisTemplate, new ObjectMapper());
         // JANGAN stub opsForValue di sini — hanya stub pada test yang memerlukannya,
         // untuk menghindari UnnecessaryStubbing pada test noIdempotencyKey.
     }
@@ -69,7 +71,7 @@ class IdempotencyAspectTest {
         // Then
         assertThat(result).isEqualTo("proceed-result");
         verify(valueOperations, times(1))
-                .setIfAbsent(eq("finledger:idempotency:" + uniqueKey), eq("1"), any(Duration.class));
+                .setIfAbsent(eq("finledger:idempotency:" + uniqueKey), eq(""), any(Duration.class));
     }
 
     @Test
@@ -134,5 +136,129 @@ class IdempotencyAspectTest {
         verify(valueOperations, times(1)).setIfAbsent(keyCaptor.capture(), anyString(), any(Duration.class));
         assertThat(keyCaptor.getValue()).startsWith("finledger:idempotency:");
         assertThat(keyCaptor.getValue()).endsWith(key);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Sprint C: idempotency sejati                                        */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("Retry identik harus mengembalikan respons dari cache, bukan 409")
+    void identicalRetry_shouldReturnCachedResponse() throws Throwable {
+        // Given
+        String key = "cache-key";
+        String scope = "AccountServiceImpl.createAccount";
+        String fingerprint = "fp-123";
+        AccountResponse cached = AccountResponse.builder()
+                .id(UUID.randomUUID())
+                .ownerId("cust-001")
+                .accountName("Dompet")
+                .build();
+        String json = new ObjectMapper().writeValueAsString(cached);
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(false);
+        when(valueOperations.get("finledger:idempotency:" + scope + ":" + key))
+                .thenReturn(fingerprint + "\n" + json);
+
+        // When
+        Object result = aspect.execute(scope, key, 86400, fingerprint,
+                AccountResponse.class, () -> {
+                    throw new IllegalStateException("method tidak boleh dijalankan ulang");
+                });
+
+        // Then
+        assertThat(result).isInstanceOf(AccountResponse.class);
+        assertThat(((AccountResponse) result).getOwnerId()).isEqualTo("cust-001");
+    }
+
+    @Test
+    @DisplayName("Payload berbeda dengan kunci sama harus ditolak 409")
+    void differentPayload_shouldBeRejected() {
+        // Given
+        String key = "conflict-key";
+        String scope = "AccountServiceImpl.createAccount";
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(false);
+        when(valueOperations.get("finledger:idempotency:" + scope + ":" + key))
+                .thenReturn("fingerprint-lain");
+
+        // When & Then
+        assertThatThrownBy(() -> aspect.execute(scope, key, 86400, "fingerprint-baru",
+                AccountResponse.class, () -> "result"))
+                .isInstanceOf(IdempotencyRejectedException.class)
+                .hasMessageContaining("sudah digunakan");
+    }
+
+    @Test
+    @DisplayName("Permintaan yang masih diproses harus 409 agar klien retry nanti")
+    void inProgressRequest_shouldBeRejected() {
+        // Given
+        String key = "in-progress-key";
+        String scope = "AccountServiceImpl.createAccount";
+        String fingerprint = "fp-abc";
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(false);
+        when(valueOperations.get("finledger:idempotency:" + scope + ":" + key))
+                .thenReturn(fingerprint);
+
+        // When & Then
+        assertThatThrownBy(() -> aspect.execute(scope, key, 86400, fingerprint,
+                AccountResponse.class, () -> "result"))
+                .isInstanceOf(IdempotencyRejectedException.class)
+                .hasMessageContaining("sedang diproses");
+    }
+
+    @Test
+    @DisplayName("Kunci Redis harus di-scope per operasi (Class.method)")
+    void redisKeyShouldBeScopedPerOperation() throws Throwable {
+        // Given
+        String key = "scoped-key";
+        String scope = "AccountServiceImpl.updateStatus";
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(true);
+
+        // When
+        aspect.execute(scope, key, 86400, "fp", null, () -> "result");
+
+        // Then
+        verify(valueOperations).setIfAbsent(
+                eq("finledger:idempotency:" + scope + ":" + key), eq("fp"), any(Duration.class));
+    }
+
+    @Test
+    @DisplayName("Respons sukses harus disimpan ke Redis bersama fingerprint")
+    void successfulResponse_shouldBeCached() throws Throwable {
+        // Given
+        String key = "cache-store-key";
+        String scope = "AccountServiceImpl.createAccount";
+        String fingerprint = "fp-store";
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any(Duration.class)))
+                .thenReturn(true);
+
+        AccountResponse response = AccountResponse.builder().ownerId("cust-009").build();
+
+        // When
+        Object result = aspect.execute(scope, key, 86400, fingerprint,
+                AccountResponse.class, () -> response);
+
+        // Then
+        assertThat(result).isSameAs(response);
+        ArgumentCaptor<String> valueCaptor = ArgumentCaptor.forClass(String.class);
+        verify(valueOperations).set(
+                eq("finledger:idempotency:" + scope + ":" + key),
+                valueCaptor.capture(),
+                any(Duration.class));
+        assertThat(valueCaptor.getValue()).startsWith(fingerprint + "\n");
+        assertThat(valueCaptor.getValue()).contains("cust-009");
     }
 }
