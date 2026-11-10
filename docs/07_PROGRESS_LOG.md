@@ -97,10 +97,14 @@
 
 ## Catatan CI
 
-- **Status: hijau** (run `42766358423`, 4m09s) untuk commit Fase I `5d1f03b`.
-- Run hijau sebelumnya: `42763365595` (dokumentasi Fase H), `42763170381` (logout), `42762838986` (Fase H final), `42759043214` (Fase F/G).
+- **Status: hijau** (run `42773495899`, 4m14s) untuk commit Fase J+K `e26fc9c`.
+- Run hijau sebelumnya: `42766358423` (Fase I), `42763365595` (dokumentasi Fase H), `42763170381` (logout), `42762838986` (Fase H final).
+- Run **gagal** `42772889107` menemukan bug konfigurasi nyata: `application-dev.yml`
+  menimpa `management.endpoints.web.exposure.include` tanpa `prometheus`
+  (`SPRING_PROFILES_ACTIVE=dev` dipakai CI), sehingga `/actuator/prometheus` → 500.
+  Diperbaiki di `e26fc9c` dan dijaga oleh regression test.
 - `ci.yml` (setiap push): unit + integration + SpotBugs + JaCoCo. Target < 5 menit.
-- Uji lokal terakhir: **165 unit + 12 integration**, JaCoCo gate 50% terpenuhi.
+- Uji lokal terakhir: **185 unit + 14 integration**, JaCoCo gate 50% terpenuhi.
 - `security-scan.yml` (mingguan/manual/perubahan `pom.xml`): OWASP Dependency-Check.
   - Tanpa secret `NVD_API_KEY`, scan **dilewati** (dependency-check mengunduh
     421.868 record NVD dan bisa 30–60 menit).
