@@ -19,7 +19,7 @@ import com.alfagift.finledger.dto.SettlementResponse;
 import com.alfagift.finledger.infrastructure.AccountInactiveException;
 import com.alfagift.finledger.infrastructure.Idempotent;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
-import com.alfagift.finledger.infrastructure.SettlementConflictException;
+import com.alfagift.finledger.infrastructure.ResourceConflictException;
 import com.alfagift.finledger.infrastructure.config.SettlementProperties;
 import com.alfagift.finledger.infrastructure.metrics.FinLedgerMetrics;
 import com.alfagift.finledger.repository.AccountRepository;
@@ -57,12 +57,12 @@ import java.util.UUID;
  * <p>
  * Jaminan integritas:
  * <ol>
- *   <li><b>Periode tidak bertumpuk</b> — dicek di bawah PostgreSQL advisory lock
+ *   <li><b>Periode tidak bertumpuk</b> â€” dicek di bawah PostgreSQL advisory lock
  *       per merchant+currency sehingga dua admin yang membuat batch paralel
  *       tidak bisa menghasilkan periode overlap.</li>
- *   <li><b>Payout sekali saja</b> — baris settlement dikunci
+ *   <li><b>Payout sekali saja</b> â€” baris settlement dikunci
  *       {@code PESSIMISTIC_WRITE} lalu status diperiksa ulang.</li>
- *   <li><b>Double-entry</b> — payout selalu menghasilkan pasangan DEBIT merchant
+ *   <li><b>Double-entry</b> â€” payout selalu menghasilkan pasangan DEBIT merchant
  *       dan CREDIT akun clearing dengan nominal sama.</li>
  * </ol>
  */
@@ -136,7 +136,7 @@ public class SettlementServiceImpl implements SettlementService {
         if (settlementRepository.existsOverlappingPeriod(request.getMerchantId(), request.getCurrency(),
                 request.getPeriodStart(), request.getPeriodEnd(), SettlementStatus.CANCELLED)) {
             metrics.settlementRejected("overlap");
-            throw new SettlementConflictException(String.format(
+            throw new ResourceConflictException(String.format(
                     "Periode %s s/d %s bertumpuk dengan batch settlement lain untuk merchant %s (%s)",
                     request.getPeriodStart(), request.getPeriodEnd(), request.getMerchantId(), request.getCurrency()));
         }
@@ -240,16 +240,16 @@ public class SettlementServiceImpl implements SettlementService {
 
         if (settlement.getStatus() == SettlementStatus.PAID) {
             metrics.settlementRejected("already_paid");
-            throw new SettlementConflictException(
+            throw new ResourceConflictException(
                     "Settlement " + settlementId + " sudah dibayar (payout " + settlement.getPayoutTransactionId() + ")");
         }
         if (settlement.getStatus() == SettlementStatus.CANCELLED) {
             metrics.settlementRejected("cancelled");
-            throw new SettlementConflictException("Settlement " + settlementId + " sudah dibatalkan");
+            throw new ResourceConflictException("Settlement " + settlementId + " sudah dibatalkan");
         }
         if (settlement.getNetAmount().signum() <= 0) {
             metrics.settlementRejected("non_positive_net");
-            throw new SettlementConflictException(
+            throw new ResourceConflictException(
                     "Settlement " + settlementId + " tidak punya net positif untuk dibayar");
         }
 
@@ -319,7 +319,7 @@ public class SettlementServiceImpl implements SettlementService {
                 .orElseThrow(() -> new EntityNotFoundException("Settlement tidak ditemukan: " + settlementId));
 
         if (!settlement.isCancellable()) {
-            throw new SettlementConflictException(String.format(
+            throw new ResourceConflictException(String.format(
                     "Settlement %s berstatus %s dan tidak dapat dibatalkan", settlementId, settlement.getStatus()));
         }
 

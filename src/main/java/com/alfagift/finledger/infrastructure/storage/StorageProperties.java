@@ -33,7 +33,10 @@ public record StorageProperties(
         @DefaultValue("5242880") long maxFileSizeBytes,
         @DefaultValue({"image/png", "image/jpeg", "image/webp", "application/pdf"})
         List<String> allowedContentTypes,
-        @DefaultValue("300") long presignedTtlSeconds) {
+        @DefaultValue("300") long presignedTtlSeconds,
+        @DefaultValue("52428800") long presignMaxBytes,
+        @DefaultValue("365") int retentionDays,
+        @DefaultValue("0 0 3 * * *") String retentionCron) {
 
     public StorageProperties {
         if (type == null || type.isBlank()) {
@@ -45,6 +48,12 @@ public record StorageProperties(
         }
         if (maxFileSizeBytes <= 0) {
             throw new IllegalArgumentException("app.storage.max-file-size-bytes harus > 0");
+        }
+        if (presignMaxBytes <= 0) {
+            throw new IllegalArgumentException("app.storage.presign-max-bytes harus > 0");
+        }
+        if (retentionDays < 0) {
+            throw new IllegalArgumentException("app.storage.retention-days tidak boleh negatif");
         }
         if (allowedContentTypes == null || allowedContentTypes.isEmpty()) {
             allowedContentTypes = List.of("image/png", "image/jpeg", "image/webp", "application/pdf");

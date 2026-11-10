@@ -4,7 +4,7 @@ import com.alfagift.finledger.domain.enums.Currency;
 import com.alfagift.finledger.domain.enums.SettlementStatus;
 import com.alfagift.finledger.dto.SettlementPreviewResponse;
 import com.alfagift.finledger.dto.SettlementResponse;
-import com.alfagift.finledger.infrastructure.SettlementConflictException;
+import com.alfagift.finledger.infrastructure.ResourceConflictException;
 import com.alfagift.finledger.infrastructure.exception.GlobalExceptionHandler;
 import com.alfagift.finledger.service.SettlementService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -110,7 +110,7 @@ class SettlementControllerTest {
     @DisplayName("Periode bertumpuk harus dipetakan ke 409 CONFLICT")
     void overlappingPeriodShouldReturn409() throws Exception {
         when(settlementService.create(any(), eq("IDEM-2")))
-                .thenThrow(new SettlementConflictException("Periode bertumpuk"));
+                .thenThrow(new ResourceConflictException("Periode bertumpuk"));
 
         String body = objectMapper.writeValueAsString(Map.of(
                 "merchantId", "merchant-001",

@@ -160,6 +160,10 @@ Dashboard memuat: request rate, latency p95/p99, error 5xx, TPS checkout,
 batch settlement (created/paid/rejected), nilai payout, rekonsiliasi, unggahan
 bukti bayar, JVM heap, dan koneksi HikariCP.
 
+Alert rules tersedia di `observability/alert-rules.yml` (8 aturan) dan dapat
+dilihat di `http://localhost:9090/alerts` — termasuk rekonsiliasi berselisih,
+settlement ditolak, lonjakan penolakan bukti bayar, 5xx tinggi, dan pool DB jenuh.
+
 ---
 
 ## Autentikasi & Otorisasi
@@ -249,6 +253,9 @@ Mekanisme keamanan tambahan:
 | `GET` | `/api/v1/payment-proofs/{proofId}` | Metadata bukti + `presignedUrl` (bila S3) | ✅ |
 | `GET` | `/api/v1/payment-proofs/{proofId}/content` | Streaming isi file bukti bayar | ✅ |
 | `DELETE` | `/api/v1/payment-proofs/{proofId}` | Hapus bukti bayar + blob (ADMIN) | ✅ |
+| `POST` | `/api/v1/payment-proofs/presign` | Presigned upload untuk file besar (URL PUT) | ✅ |
+| `POST` | `/api/v1/payment-proofs/{proofId}/complete` | Verifikasi objek hasil presigned upload | ✅ |
+| `POST` | `/api/v1/payment-proofs/retention/run` | Jalankan retensi manual (ADMIN) | ✅ |
 
 **Kontrak lintas-endpoint:**
 - `POST`/`PATCH` wajib `X-Idempotency-Key`. Retry identik mengembalikan respons sukses yang sama (cached), payload berbeda → `409`.

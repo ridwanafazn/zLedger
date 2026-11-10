@@ -10,16 +10,22 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 import software.amazon.awssdk.core.exception.SdkException;
+import org.springframework.http.HttpHeaders;
 
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -110,6 +116,49 @@ public class S3BlobStorage implements BlobStorage {
                         .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
                         .build());
         return Optional.of(presigned.url().toString());
+    }
+
+    @Override
+    public Optional<PresignedUpload> presignedUploadUrl(String key, String contentType, long sizeBytes,
+                                                        String checksumSha256Base64, Duration ttl) {
+        PutObjectRequest.Builder putRequest = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(key)
+                .contentType(contentType)
+                .contentLength(sizeBytes);
+        if (checksumSha256Base64 != null && !checksumSha256Base64.isBlank()) {
+            putRequest.checksumSHA256(checksumSha256Base64);
+        }
+
+        PresignedPutObjectRequest presigned = presigner.presignPutObject(
+                PutObjectPresignRequest.builder()
+                        .signatureDuration(ttl)
+                        .putObjectRequest(putRequest.build())
+                        .build());
+
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put(HttpHeaders.CONTENT_TYPE, contentType);
+        headers.put(HttpHeaders.CONTENT_LENGTH, Long.toString(sizeBytes));
+        if (checksumSha256Base64 != null && !checksumSha256Base64.isBlank()) {
+            headers.put("x-amz-checksum-sha256", checksumSha256Base64);
+        }
+        return Optional.of(new PresignedUpload(presigned.url().toString(), headers));
+    }
+
+    @Override
+    public Optional<BlobStat> stat(String key) {
+        try {
+            HeadObjectResponse head = client.headObject(
+                    HeadObjectRequest.builder().bucket(bucket).key(key).build());
+            return Optional.of(new BlobStat(head.contentLength(), head.contentType(), head.checksumSHA256()));
+        } catch (NoSuchKeyException ex) {
+            return Optional.empty();
+        } catch (SdkException ex) {
+            if (ex instanceof S3Exception s3 && s3.statusCode() == 404) {
+                return Optional.empty();
+            }
+            throw new BlobStorageException("Gagal membaca metadata blob " + key + " dari S3", ex);
+        }
     }
 
     private void ensureBucket() {

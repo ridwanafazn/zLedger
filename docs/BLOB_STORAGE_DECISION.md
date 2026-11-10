@@ -30,10 +30,10 @@ Implementasi memilih **proxy upload lewat API** sebagai jalur utama:
 | Portabilitas | Perlu SDK presigner di klien | Klien cukup `multipart/form-data` |
 
 Untuk bukti bayar berukuran ≤ 5 MB, keamanan dan kesederhanaan lebih bernilai
-daripada penghematan bandwidth. Jalur presigned tetap disediakan **untuk unduhan**
-(`presignedUrl` pada respons metadata saat storage = S3), dan port `BlobStorage`
-sudah menyediakan `presignedDownloadUrl` agar upload presigned dapat ditambahkan
-tanpa mengubah domain.
+daripada penghematan bandwidth. Untuk file yang lebih besar, aplikasi menyediakan
+jalur **presigned upload** (metadata `PENDING` → PUT langsung ke storage →
+`complete` dengan verifikasi ukuran/tipe/checksum), sehingga byte tidak pernah
+melewati aplikasi namun tetap tervalidasi sebelum dipakai.
 
 ## Kontrol keamanan
 
@@ -63,8 +63,10 @@ tanpa mengubah domain.
 ## Catatan lingkungan
 
 Image `minio/minio` tidak dapat diunduh pada environment pengembangan ini
-(`pull access denied`), sehingga `docker-compose.yml` memakai **adobe/s3mock**
-(port host **9091**) sebagai backend S3-compatible untuk demo. Untuk MinIO:
+(`pull access denied`; binary community di `dl.min.io` juga mengembalikan **410 Gone**
+karena MinIO beralih ke AIStor berlisensi), sehingga `docker-compose.yml` memakai
+**adobe/s3mock** (port host **9091**) sebagai backend S3-compatible untuk demo.
+Untuk MinIO:
 
 ```yaml
 minio:
@@ -74,4 +76,29 @@ minio:
 ```
 
 lalu set `STORAGE_ENDPOINT=http://localhost:9000`. Kode aplikasi identik karena
-keduanya memakai S3 API yang sama.
+keduanya memakai S3 API yang sama. Alternatif open-source yang masih dapat diunduh:
+**Garage** (`dxflrs/garage`), **SeaweedFS** (`chrislusf/seaweedfs`), atau **Ceph RGW**.
+
+## Presigned upload (file besar)
+
+```
+POST /api/v1/payment-proofs/presign   → { proofId, uploadUrl, method, headers, expiresAt }
+PUT  <uploadUrl>                      → kirim byte file + headers yang diminta
+POST /api/v1/payment-proofs/{proofId}/complete → server verifikasi ukuran/tipe/checksum
+```
+
+Batas: `app.storage.presign-max-bytes` (default 50 MB), TTL
+`app.storage.presigned-ttl-seconds` (default 300 detik). Metadata berstatus
+`PENDING` sampai `complete` berhasil; PENDING yang kedaluwarsa dibersihkan
+otomatis oleh job retensi.
+
+## Retensi
+
+`app.storage.retention-days` (default 365) dan `app.storage.retention-cron`
+(default `0 0 3 * * *`). Job harian menghapus bukti `UPLOADED` yang melewati
+batas simpan beserta objeknya, serta metadata `PENDING` yang kedaluwarsa.
+ADMIN dapat memicu manual:
+
+```
+POST /api/v1/payment-proofs/retention/run?olderThanDays=365
+```

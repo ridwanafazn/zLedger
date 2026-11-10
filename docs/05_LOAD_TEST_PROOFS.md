@@ -175,6 +175,31 @@ seluruh akun sehingga drift sekecil apa pun akan terdeteksi. Uji otomatis setara
 integritasnya dapat diverifikasi ulang kapan saja lewat checksum, dan seluruh
 layanan terpantau metrik yang siap di-scrape Prometheus.
 
+## Skenario 8 — Presigned Upload & Retensi (file besar)
+
+**Setup:** instance kedua `STORAGE_TYPE=s3` (port 8081) + S3Mock; harness
+`loadtest/presign-smoke.ps1` mengunggah file **3 MB** langsung ke storage.
+
+**Hasil aktual:**
+
+| Langkah | Hasil |
+|---|---|
+| `POST /payment-proofs/presign` | `200`, URL PUT bertanda tangan |
+| `PUT` langsung ke S3 (klien → storage) | `200` |
+| `POST /payment-proofs/{id}/complete` | `200` status `UPLOADED` |
+| Checksum server vs hash lokal | **identik** (`2c7a7131…`) |
+| Ukuran objek | 3.145.728 byte (sesuai) |
+| Unduh lewat API | `200`, hash identik |
+| `POST /payment-proofs/retention/run?olderThanDays=0` | menghapus 1 bukti + objeknya |
+| Metadata setelah retensi | `404` |
+
+Alert rules: 8 aturan dalam 3 grup dimuat Prometheus (`/api/v1/rules`), termasuk
+`FinLedgerReconciliationDiscrepancy` dan `FinLedgerSettlementRejected`.
+
+**Kesimpulan:** file besar tidak lagi melewati aplikasi, namun tetap diverifikasi
+server (ukuran, tipe, checksum) sebelum dianggap sah; retensi menghapus metadata
+dan objek secara konsisten.
+
 ## Cara Menjalankan Ulang
 
 ```powershell

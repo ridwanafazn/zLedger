@@ -121,6 +121,10 @@ app:
     max-file-size-bytes: ${STORAGE_MAX_FILE_SIZE:5242880}
     allowed-content-types: ${STORAGE_ALLOWED_TYPES:image/png,image/jpeg,image/webp,application/pdf}
     presigned-ttl-seconds: ${STORAGE_PRESIGNED_TTL:300}
+    # Presigned upload (file besar) — batas ukuran & retensi objek
+    presign-max-bytes: ${STORAGE_PRESIGN_MAX_BYTES:52428800}
+    retention-days: ${STORAGE_RETENTION_DAYS:365}
+    retention-cron: ${STORAGE_RETENTION_CRON:0 0 3 * * *}
   security:
     jwt:
       # WAJIB diganti di produksi (minimal 32 byte)

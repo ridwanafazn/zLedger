@@ -2,7 +2,7 @@ package com.alfagift.finledger.infrastructure.exception;
 
 import com.alfagift.finledger.infrastructure.IdempotencyRejectedException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
-import com.alfagift.finledger.infrastructure.SettlementConflictException;
+import com.alfagift.finledger.infrastructure.ResourceConflictException;
 import com.alfagift.finledger.infrastructure.storage.BlobNotFoundException;
 import com.alfagift.finledger.infrastructure.storage.BlobStorageException;
 import jakarta.persistence.EntityNotFoundException;
@@ -69,9 +69,9 @@ public class GlobalExceptionHandler {
                 ApiErrorCodes.IDEMPOTENCY_REJECTED, ex.getReason(), null, request);
     }
 
-    @ExceptionHandler(SettlementConflictException.class)
-    public ResponseEntity<ProblemDetailResponse> handleSettlementConflict(
-            SettlementConflictException ex, WebRequest request) {
+    @ExceptionHandler(ResourceConflictException.class)
+    public ResponseEntity<ProblemDetailResponse> handleResourceConflict(
+            ResourceConflictException ex, WebRequest request) {
         return build(HttpStatus.CONFLICT, "Settlement Conflict",
                 ApiErrorCodes.CONFLICT, ex.getMessage(), null, request);
     }

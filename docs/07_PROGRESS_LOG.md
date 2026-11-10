@@ -50,6 +50,9 @@
 | Fee settlement | `(gross − refund) × fee%`, skala 4 `HALF_UP`, default 1% (`app.settlement.fee-percent`) | Pembulatan deterministik & dapat dikonfigurasi |
 | Rekonsiliasi | `opening_balance` + `ΣCREDIT − ΣDEBIT`, hasil disimpan sebagai run + temuan | Saldo awal seed tidak lagi menghasilkan selisih palsu; audit trail permanen |
 | Bukti bayar | Proxy upload multipart + validasi magic bytes + SHA-256, blob di object storage | File divalidasi sebelum disimpan; tidak ada objek yatim; port `BlobStorage` tetap siap untuk presigned upload |
+| Presigned upload | Metadata `PENDING` + PUT bertanda tangan (S3), verifikasi ukuran/tipes/checksum saat complete | File besar tidak membebani aplikasi, tetapi tetap divalidasi server sebelum dipakai |
+| Retensi bukti bayar | Job harian: hapus `UPLOADED` > N hari + `PENDING` kedaluwarsa, termasuk objek storage | Tidak ada byte yatim; kepatuhan retensi dapat diatur via konfigurasi |
+| Alerting | 8 aturan Prometheus (availability, 5xx, latency, rekonsiliasi, settlement, bukti bayar, Hikari) | Masalah finansial/kapasitas terdeteksi otomatis, bukan dari dashboard manual |
 | Object storage | Port `BlobStorage`; default `local`, `s3` untuk MinIO/S3 (S3Mock di compose karena image MinIO tidak tersedia di env ini) | Kode produksi sama dengan demo; tanpa Docker tetap bisa diuji |
 | Metrik | Micrometer Prometheus + metrik bisnis berprefix `finledger.*` | Satu sumber kebenaran untuk alert & dashboard, tanpa agent tambahan |
 | Test | Surefire unit, Failsafe integration | `mvn test` tetap jalan tanpa Docker |
@@ -74,10 +77,14 @@
    untuk merchant volume besar sebaiknya ditambah preview berbasis agregasi SQL.
 7. Payout belum memakai jurnal reversal untuk "batalkan payout" (hanya reversal manual admin
    lewat `POST /ledger/transactions/{id}/reverse`).
-8. Upload bukti bayar mem-buffer file di memori (maksimum 5 MB). Untuk file lebih besar,
-   gunakan presigned upload langsung ke S3.
+8. Upload multipart mem-buffer file di memori (maksimum 5 MB). File yang lebih besar
+   harus memakai jalur presigned (`presign` → PUT → `complete`), yang hanya tersedia
+   saat `app.storage.type=s3`.
 9. `/actuator/prometheus` terbuka tanpa autentikasi; di produksi batasi lewat network policy
    atau port manajemen terpisah.
+10. Alert masih tampil di Prometheus (`/alerts`); belum ada Alertmanager/Slack routing.
+11. Retensi berjalan harian pada satu instance; bila aplikasi di-scale-out, job perlu
+    distributed lock (mis. ShedLock) agar tidak berjalan ganda.
 
 ## Riwayat Perubahan
 
@@ -93,6 +100,7 @@
 | 2026-11-10 | Fase I: settlement merchant (V8 `merchant_settlements`/`settlement_items`) + rekonsiliasi audit (V7 `opening_balance`, `reference_type.SETTLEMENT`), endpoint ADMIN, 165 unit + 12 integration hijau, smoke HTTP 15/15 lulus |
 | 2026-11-10 | Fase J: bukti bayar (V9 `payment_proofs`), port `BlobStorage` (local/S3), validasi magic bytes + SHA-256, streaming unduh, presigned URL; smoke 21/21 lulus (termasuk jalur S3 nyata ke S3Mock) |
 | 2026-11-10 | Fase K: Micrometer Prometheus (`/actuator/prometheus`), 12 panel Grafana auto-provisioned, metrik bisnis settlement/rekonsiliasi/bukti bayar, Prometheus target UP |
+| 2026-11-10 | Backlog J/K tuntas: V10 (`status`/`upload_method`/`expires_at`), presigned upload (presign → PUT → complete, verifikasi checksum server), retensi harian + endpoint manual, 8 alert rules Prometheus; smoke presign 14/14 (file 3 MB langsung ke S3) |
 | 2026-11-10 | Fix config: `application-dev.yml` menimpa `management.endpoints.web.exposure.include` tanpa `prometheus` (CI `SPRING_PROFILES_ACTIVE=dev` mengembalikan 500 pada `/actuator/prometheus`); ditangkap CI run `42772889107` |
 
 ## Catatan CI

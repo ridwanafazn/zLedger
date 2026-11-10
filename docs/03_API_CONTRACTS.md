@@ -25,8 +25,11 @@ All endpoints are prefixed with `/api/v1`.
 - Rekonsiliasi (ADMIN): `POST /reconciliation/runs`, `GET /reconciliation/runs`,
   `GET /reconciliation/runs/{id}`.
 - Bukti bayar: `POST /payment-proofs` (multipart, CUSTOMER/MERCHANT/ADMIN),
+  `POST /payment-proofs/presign` (URL PUT untuk file besar),
+  `POST /payment-proofs/{id}/complete` (verifikasi objek),
   `GET /payment-proofs?transactionId=`, `GET /payment-proofs/{id}`,
-  `GET /payment-proofs/{id}/content` (streaming), `DELETE /payment-proofs/{id}` (ADMIN).
+  `GET /payment-proofs/{id}/content` (streaming), `DELETE /payment-proofs/{id}` (ADMIN),
+  `POST /payment-proofs/retention/run` (ADMIN).
 - Observability: `GET /actuator/health`, `/actuator/metrics`, `/actuator/prometheus`.
 - CORS: origin frontend diatur via `app.cors.allowed-origins`.
 

@@ -90,6 +90,26 @@ public class LocalFileSystemBlobStorage implements BlobStorage {
         return Optional.empty();
     }
 
+    @Override
+    public Optional<PresignedUpload> presignedUploadUrl(String key, String contentType, long sizeBytes,
+                                                        String checksumSha256Base64, Duration ttl) {
+        // Unggah langsung hanya masuk akal untuk object storage (S3/MinIO).
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<BlobStat> stat(String key) {
+        Path target = resolve(key);
+        if (!Files.isRegularFile(target)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new BlobStat(Files.size(target), null, null));
+        } catch (IOException ex) {
+            throw new BlobStorageException("Gagal membaca metadata blob " + key, ex);
+        }
+    }
+
     private Path resolve(String key) {
         if (key == null || key.isBlank() || key.startsWith("/") || key.contains("\\")) {
             throw new IllegalArgumentException("Object key blob tidak valid: " + key);

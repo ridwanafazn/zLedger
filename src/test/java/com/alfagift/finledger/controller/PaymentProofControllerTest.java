@@ -136,4 +136,47 @@ class PaymentProofControllerTest {
 
         verify(paymentProofService).delete(PROOF_ID);
     }
+
+    @Test
+    @DisplayName("POST /presign harus mengembalikan URL unggah + header wajib")
+    void presignShouldReturnUploadUrl() throws Exception {
+        when(paymentProofService.presign(any(), eq("cust-001")))
+                .thenReturn(com.alfagift.finledger.dto.PaymentProofPresignResponse.builder()
+                        .proofId(PROOF_ID)
+                        .transactionId(TRANSACTION_ID)
+                        .objectKey("payment-proofs/2026/11/x.png")
+                        .uploadUrl("http://localhost:9091/finledger-proofs/x.png?sig=abc")
+                        .method("PUT")
+                        .headers(java.util.Map.of("Content-Type", "image/png"))
+                        .sizeBytes(2048)
+                        .completeUrl("/api/v1/payment-proofs/" + PROOF_ID + "/complete")
+                        .build());
+
+        String body = "{\"transactionId\":\"" + TRANSACTION_ID + "\",\"filename\":\"x.png\","
+                + "\"contentType\":\"image/png\",\"sizeBytes\":2048}";
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/payment-proofs/presign")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body)
+                        .principal(customer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.method").value("PUT"))
+                .andExpect(jsonPath("$.uploadUrl").exists())
+                .andExpect(jsonPath("$.completeUrl").exists());
+    }
+
+    @Test
+    @DisplayName("POST /retention/run harus mengembalikan jumlah yang dihapus")
+    void retentionShouldReturnPurgedCount() throws Exception {
+        when(paymentProofService.purgeExpired(365)).thenReturn(3);
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/payment-proofs/retention/run")
+                        .param("olderThanDays", "365")
+                        .principal(customer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.purgedProofs").value(3))
+                .andExpect(jsonPath("$.olderThanDays").value(365));
+    }
 }

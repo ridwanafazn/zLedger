@@ -15,7 +15,7 @@ import com.alfagift.finledger.dto.SettlementCreateRequest;
 import com.alfagift.finledger.dto.SettlementPreviewResponse;
 import com.alfagift.finledger.dto.SettlementResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
-import com.alfagift.finledger.infrastructure.SettlementConflictException;
+import com.alfagift.finledger.infrastructure.ResourceConflictException;
 import com.alfagift.finledger.infrastructure.config.SettlementProperties;
 import com.alfagift.finledger.infrastructure.metrics.FinLedgerMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -290,7 +290,7 @@ class SettlementServiceImplTest {
             stubAdvisoryLock();
 
             assertThatThrownBy(() -> settlementService.create(request(), "IDEM-OVERLAP"))
-                    .isInstanceOf(SettlementConflictException.class)
+                    .isInstanceOf(ResourceConflictException.class)
                     .hasMessageContaining("bertumpuk");
         }
 
@@ -378,7 +378,7 @@ class SettlementServiceImplTest {
                     .thenReturn(Optional.of(settlement(SettlementStatus.PAID, "1000.0000")));
 
             assertThatThrownBy(() -> settlementService.pay(SETTLEMENT_ID, "PAYOUT-2"))
-                    .isInstanceOf(SettlementConflictException.class)
+                    .isInstanceOf(ResourceConflictException.class)
                     .hasMessageContaining("sudah dibayar");
         }
 
@@ -389,7 +389,7 @@ class SettlementServiceImplTest {
                     .thenReturn(Optional.of(settlement(SettlementStatus.CANCELLED, "1000.0000")));
 
             assertThatThrownBy(() -> settlementService.pay(SETTLEMENT_ID, "PAYOUT-3"))
-                    .isInstanceOf(SettlementConflictException.class)
+                    .isInstanceOf(ResourceConflictException.class)
                     .hasMessageContaining("dibatalkan");
         }
 
@@ -453,7 +453,7 @@ class SettlementServiceImplTest {
                     .thenReturn(Optional.of(settlement(SettlementStatus.PAID, "1000.0000")));
 
             assertThatThrownBy(() -> settlementService.cancel(SETTLEMENT_ID, "terlambat"))
-                    .isInstanceOf(SettlementConflictException.class);
+                    .isInstanceOf(ResourceConflictException.class);
         }
     }
 

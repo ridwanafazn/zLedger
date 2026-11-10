@@ -16,7 +16,7 @@ import com.alfagift.finledger.dto.ReconciliationRunResponse;
 import com.alfagift.finledger.dto.SettlementCreateRequest;
 import com.alfagift.finledger.dto.SettlementPreviewResponse;
 import com.alfagift.finledger.dto.SettlementResponse;
-import com.alfagift.finledger.infrastructure.SettlementConflictException;
+import com.alfagift.finledger.infrastructure.ResourceConflictException;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
@@ -47,8 +47,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Integration test Fase I: settlement + rekonsiliasi end-to-end di PostgreSQL.
  * <p>
- * Membuktikan alur nyata: checkout → refund → batch settlement → payout
- * (jurnal SETTLEMENT) → rekonsiliasi BALANCED, serta proteksi terhadap
+ * Membuktikan alur nyata: checkout â†’ refund â†’ batch settlement â†’ payout
+ * (jurnal SETTLEMENT) â†’ rekonsiliasi BALANCED, serta proteksi terhadap
  * periode bertumpuk dan payout ganda.
  */
 @Testcontainers
@@ -174,7 +174,7 @@ class SettlementIntegrationTest {
 
         // Then: periode bertumpuk ditolak
         assertThatThrownBy(() -> settlementService.create(settlementRequest(), "it-set-overlap-" + suffix))
-                .isInstanceOf(SettlementConflictException.class);
+                .isInstanceOf(ResourceConflictException.class);
 
         // When: payout
         SettlementResponse paid = settlementService.pay(settlement.getId(), "it-set-pay-" + suffix);
@@ -207,7 +207,7 @@ class SettlementIntegrationTest {
 
         // Then: payout kedua ditolak
         assertThatThrownBy(() -> settlementService.pay(settlement.getId(), "it-set-pay-again-" + suffix))
-                .isInstanceOf(SettlementConflictException.class);
+                .isInstanceOf(ResourceConflictException.class);
 
         // Then: rekonsiliasi tetap seimbang setelah payout
         ReconciliationRunResponse run = reconciliationService.run("it-test", "setelah payout");

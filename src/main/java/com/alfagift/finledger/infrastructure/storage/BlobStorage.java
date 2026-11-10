@@ -47,4 +47,24 @@ public interface BlobStorage {
      * mengembalikan {@link Optional#empty()} sehingga aplikasi melakukan streaming.
      */
     Optional<String> presignedDownloadUrl(String key, Duration ttl);
+
+    /**
+     * URL unggah sementara (presigned PUT) agar klien dapat mengirim file besar
+     * langsung ke storage tanpa melewati aplikasi.
+     * <p>
+     * Storage lokal mengembalikan {@link Optional#empty()} — gunakan endpoint
+     * multipart untuk storage lokal.
+     *
+     * @param checksumSha256Base64 checksum SHA-256 (base64) yang ikut ditandatangani;
+     *                             bila null, checksum diverifikasi dengan membaca objek
+     */
+    Optional<PresignedUpload> presignedUploadUrl(String key, String contentType, long sizeBytes,
+                                                 String checksumSha256Base64, Duration ttl);
+
+    /**
+     * Membaca metadata objek tanpa mengunduh isinya.
+     *
+     * @return metadata, atau {@link Optional#empty()} bila objek tidak ada
+     */
+    Optional<BlobStat> stat(String key);
 }

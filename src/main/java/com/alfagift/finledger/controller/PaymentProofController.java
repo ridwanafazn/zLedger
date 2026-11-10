@@ -1,6 +1,8 @@
 package com.alfagift.finledger.controller;
 
 import com.alfagift.finledger.dto.PaymentProofDownload;
+import com.alfagift.finledger.dto.PaymentProofPresignRequest;
+import com.alfagift.finledger.dto.PaymentProofPresignResponse;
 import com.alfagift.finledger.dto.PaymentProofResponse;
 import com.alfagift.finledger.service.PaymentProofService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -54,6 +58,51 @@ public class PaymentProofController {
         PaymentProofResponse response = paymentProofService.upload(
                 transactionId, file, authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/presign")
+    @Operation(summary = "Presigned upload untuk file besar",
+            description = "Membuat metadata PENDING + URL PUT bertanda tangan sehingga klien mengunggah "
+                    + "langsung ke object storage (tanpa melewati aplikasi). Hanya tersedia untuk storage S3.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "URL unggah diterbitkan"),
+            @ApiResponse(responseCode = "400", description = "Tipe/ukuran file tidak valid"),
+            @ApiResponse(responseCode = "409", description = "Storage lokal tidak mendukung presigned upload")
+    })
+    public ResponseEntity<PaymentProofPresignResponse> presign(
+            @Valid @RequestBody PaymentProofPresignRequest request,
+            Authentication authentication) {
+
+        return ResponseEntity.ok(paymentProofService.presign(request, authentication.getName()));
+    }
+
+    @PostMapping("/{proofId}/complete")
+    @Operation(summary = "Selesaikan presigned upload",
+            description = "Memverifikasi objek yang sudah diunggah langsung ke storage (ukuran, tipe, checksum) "
+                    + "lalu menandai metadata UPLOADED.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Objek terverifikasi"),
+            @ApiResponse(responseCode = "400", description = "Objek belum ada / ukuran / tipe / checksum tidak cocok"),
+            @ApiResponse(responseCode = "409", description = "Sudah UPLOADED atau presigned kedaluwarsa")
+    })
+    public ResponseEntity<PaymentProofResponse> complete(@PathVariable UUID proofId,
+                                                         Authentication authentication) {
+        return ResponseEntity.ok(paymentProofService.complete(
+                proofId, authentication.getName(), isAdmin(authentication)));
+    }
+
+    @PostMapping("/retention/run")
+    @Operation(summary = "Jalankan retensi manual (ADMIN)",
+            description = "Menghapus bukti UPLOADED yang lebih tua dari batas simpan dan metadata PENDING "
+                    + "yang presigned-nya kedaluwarsa. Job terjadwal menjalankan hal yang sama setiap hari.")
+    public ResponseEntity<Map<String, Object>> runRetention(
+            @Parameter(description = "Batas simpan dalam hari (0 = hapus semua bukti UPLOADED)")
+            @RequestParam(defaultValue = "365") int olderThanDays) {
+
+        int purged = paymentProofService.purgeExpired(olderThanDays);
+        return ResponseEntity.ok(Map.of(
+                "purgedProofs", purged,
+                "olderThanDays", olderThanDays));
     }
 
     @GetMapping

@@ -3,12 +3,14 @@ package com.alfagift.finledger.infrastructure.metrics;
 import com.alfagift.finledger.domain.enums.ReconciliationStatus;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Metrik bisnis FinLedger yang diekspos melalui {@code /actuator/prometheus}
@@ -21,9 +23,14 @@ import java.util.concurrent.TimeUnit;
 public class FinLedgerMetrics {
 
     private final MeterRegistry registry;
+    private final AtomicInteger lastReconciliationDiscrepancies = new AtomicInteger(0);
 
     public FinLedgerMetrics(MeterRegistry registry) {
         this.registry = registry;
+        Gauge.builder("finledger.reconciliation.discrepancies.last", lastReconciliationDiscrepancies,
+                        AtomicInteger::get)
+                .description("Jumlah temuan pada eksekusi rekonsiliasi terakhir (0 = BALANCED)")
+                .register(registry);
     }
 
     /* ------------------------------------------------------------------ */
@@ -69,6 +76,8 @@ public class FinLedgerMetrics {
     /* ------------------------------------------------------------------ */
 
     public void reconciliationCompleted(ReconciliationStatus status, int discrepancyCount, long durationMillis) {
+        lastReconciliationDiscrepancies.set(discrepancyCount);
+
         Counter.builder("finledger.reconciliation.runs")
                 .description("Jumlah eksekusi rekonsiliasi")
                 .tag("status", status.name())
@@ -111,6 +120,21 @@ public class FinLedgerMetrics {
                 .tag("reason", reason)
                 .register(registry)
                 .increment();
+    }
+
+    public void proofPresigned(String contentType) {
+        Counter.builder("finledger.payment_proof.presigned")
+                .description("Jumlah presigned upload yang diterbitkan")
+                .tag("content_type", contentType)
+                .register(registry)
+                .increment();
+    }
+
+    public void proofPurged(int count) {
+        Counter.builder("finledger.payment_proof.purged")
+                .description("Jumlah bukti bayar yang dihapus oleh kebijakan retensi")
+                .register(registry)
+                .increment(count);
     }
 
     private void amount(String name, String currency, String description, BigDecimal value) {

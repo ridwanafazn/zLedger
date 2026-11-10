@@ -1,0 +1,105 @@
+# Alert rules FinLedger Engine (Fase K).
+# Dimuat oleh Prometheus (lihat observability/prometheus.yml).
+# Alert tampil di http://localhost:9090/alerts dan dapat diteruskan ke
+# Alertmanager/Slack dengan menambahkan konfigurasi alerting pada Prometheus.
+
+groups:
+  - name: finledger-availability
+    rules:
+      - alert: FinLedgerDown
+        expr: up{job="finledger-engine"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: app
+        annotations:
+          summary: "FinLedger Engine tidak dapat di-scrape"
+          description: "Target {{ $labels.instance }} gagal di-scrape lebih dari 1 menit. Periksa proses aplikasi dan /actuator/health."
+
+      - alert: FinLedgerHigh5xxRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{application="finledger-engine",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_seconds_count{application="finledger-engine"}[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "Error 5xx FinLedger di atas 5%"
+          description: "Rasio 5xx = {{ $value | humanizePercentage }} selama 5 menit terakhir."
+
+      - alert: FinLedgerHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_server_requests_seconds_bucket{application="finledger-engine"}[5m])) by (le)
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Latensi p95 FinLedger > 1 detik"
+          description: "p95 = {{ $value | humanizeDuration }} selama 10 menit terakhir."
+
+  - name: finledger-finance
+    rules:
+      - alert: FinLedgerReconciliationDiscrepancy
+        expr: finledger_reconciliation_discrepancies_last{application="finledger-engine"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: ledger
+        annotations:
+          summary: "Rekonsiliasi menemukan selisih saldo/jurnal"
+          description: "Eksekusi rekonsiliasi terakhir menemukan {{ $value }} temuan. Periksa GET /api/v1/reconciliation/runs."
+
+      - alert: FinLedgerSettlementRejected
+        expr: |
+          increase(
+            finledger_settlement_rejected_total{
+              application="finledger-engine",
+              reason=~"already_paid|non_positive_net|cancelled"
+            }[15m]
+          ) > 0
+        labels:
+          severity: warning
+          component: settlement
+        annotations:
+          summary: "Permintaan settlement ditolak"
+          description: "Ada {{ $value }} penolakan settlement (alasan {{ $labels.reason }}) dalam 15 menit. Cek batch yang sudah dibayar/dibatalkan."
+
+      - alert: FinLedgerPaymentProofRejectedSpike
+        expr: increase(finledger_payment_proof_rejected_total{application="finledger-engine"}[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: payment-proof
+        annotations:
+          summary: "Lonjakan penolakan bukti bayar"
+          description: "{{ $value }} penolakan (alasan {{ $labels.reason }}) dalam 10 menit — kemungkinan klien mengirim tipe/checksum salah."
+
+      - alert: FinLedgerPresignedUploadExpired
+        expr: increase(finledger_payment_proof_rejected_total{application="finledger-engine",reason="presign_expired"}[1h]) > 5
+        for: 10m
+        labels:
+          severity: info
+          component: payment-proof
+        annotations:
+          summary: "Banyak presigned upload kedaluwarsa"
+          description: "{{ $value }} presigned upload tidak diselesaikan dalam 1 jam terakhir. Klien mungkin butuh TTL lebih panjang."
+
+  - name: finledger-capacity
+    rules:
+      - alert: FinLedgerHikariPoolSaturated
+        expr: hikaricp_connections_pending{application="finledger-engine"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Connection pool HikariCP antre"
+          description: "Ada {{ $value }} thread menunggu koneksi database selama 2 menit."

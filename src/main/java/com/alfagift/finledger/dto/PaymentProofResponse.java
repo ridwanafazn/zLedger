@@ -1,5 +1,7 @@
 package com.alfagift.finledger.dto;
 
+import com.alfagift.finledger.domain.enums.PaymentProofStatus;
+import com.alfagift.finledger.domain.enums.UploadMethod;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,6 +26,8 @@ public class PaymentProofResponse {
     private String contentType;
     private long sizeBytes;
     private String checksumSha256;
+    private PaymentProofStatus status;
+    private UploadMethod uploadMethod;
     private LocalDateTime createdAt;
 
     /** Path API untuk mengunduh lewat aplikasi (selalu tersedia). */

@@ -86,12 +86,21 @@ bukan diperbaiki otomatis, agar jejak audit tetap utuh.
 Metadata bukti bayar; byte file berada di object storage (MinIO/S3/local), bukan di PostgreSQL.
 - `transaction_id` (FK `journal_transactions`), `uploader_id`
 - `object_key` (UNIQUE), `original_filename`, `content_type`, `size_bytes`
-- `checksum_sha256` (UNIQUE per transaksi) — mencegah unggahan file yang sama dua kali
+- `checksum_sha256` (UNIQUE per transaksi bila terisi) — mencegah unggahan file yang sama dua kali
+- `status` (`PENDING|UPLOADED`), `upload_method` (`MULTIPART|PRESIGNED`), `expires_at`
 - `created_at`
 
-Alur: validasi tipe + magic bytes → hitung SHA-256 → simpan blob → simpan metadata.
-Bila metadata gagal (mis. duplikat), blob dihapus kembali. Detail keputusan:
-[`BLOB_STORAGE_DECISION.md`](BLOB_STORAGE_DECISION.md).
+Dua jalur unggah:
+1. **multipart** (≤ 5 MB) — divalidasi di server (MIME + magic bytes + ukuran) sebelum disimpan;
+2. **presigned** (≤ 50 MB) — server membuat metadata `PENDING` + URL PUT bertanda tangan,
+   klien mengunggah langsung ke storage, lalu `POST /payment-proofs/{id}/complete`
+   memverifikasi ukuran, tipe, dan checksum (dibaca dari storage) sebelum menandai `UPLOADED`.
+
+Retensi: job harian menghapus bukti `UPLOADED` yang lebih tua dari
+`app.storage.retention-days` (default 365) dan metadata `PENDING` yang presigned-nya
+kedaluwarsa, termasuk objek di storage. Dapat dipicu manual oleh ADMIN.
+
+Detail keputusan: [`BLOB_STORAGE_DECISION.md`](BLOB_STORAGE_DECISION.md).
 
 ## 3. Observability (Fase K)
 
@@ -104,6 +113,11 @@ Bila metadata gagal (mis. duplikat), blob dihapus kembali. Detail keputusan:
   - Tag global `application=finledger-engine`.
 - **Scrape:** Prometheus (`observability/prometheus.yml`, port 9090) menarik
   `host.docker.internal:8080/actuator/prometheus` setiap 15 detik.
+- **Alert rules:** `observability/alert-rules.yml` (3 grup, 8 aturan):
+  `FinLedgerDown`, `FinLedgerHigh5xxRate`, `FinLedgerHighLatencyP95`,
+  `FinLedgerReconciliationDiscrepancy`, `FinLedgerSettlementRejected`,
+  `FinLedgerPaymentProofRejectedSpike`, `FinLedgerPresignedUploadExpired`,
+  `FinLedgerHikariPoolSaturated`. Lihat `http://localhost:9090/alerts`.
 - **Visualisasi:** Grafana (port 3000) dengan datasource & dashboard yang di-provision otomatis
   (`observability/grafana/`).
 - `/actuator/prometheus` dibuka untuk scrape; di produksi batasi lewat network policy
