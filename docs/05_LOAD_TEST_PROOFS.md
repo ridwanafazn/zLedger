@@ -92,6 +92,27 @@ Jika Kafka mati, event tetap `PENDING` dan dicoba ulang hingga
 `app.outbox.max-attempts` (default 5) sebelum ditandai `FAILED` — tidak ada event
 yang hilang meski transaksi bisnis sudah commit.
 
+## Skenario 5 — Flash Sale Voucher (Anti-Overselling)
+
+**Setup:** voucher berkuota 10, 50 akun A_Poin (masing-masing 1.000 poin),
+50 request `POST /vouchers/{id}/redeem` (biaya 100 poin) dikirim **paralel**.
+
+**Hasil aktual:**
+
+| Metrik | Hasil |
+|---|---|
+| `200 OK` | **10** |
+| `400` (kuota habis / voucher tidak bisa diredeem) | **40** |
+| `5xx` | **0** |
+| Sisa kuota | **0 / 10** (tidak negatif) |
+| Riwayat redeem | 10 baris (unik per owner) |
+| Durasi total 50 request | 0.90 s |
+
+**Kesimpulan:** kunci `PESSIMISTIC_WRITE` pada baris voucher menyerialkan
+pengecekan + pengurangan kuota, sehingga tidak terjadi overselling meski
+50 request tiba bersamaan. Skenario juga diuji otomatis di
+`VoucherConcurrencyIntegrationTest` (kuota 5, 20 user paralel).
+
 ## Limitasi
 
 - Pengujian dijalankan pada satu mesin lokal (bukan cluster), sehingga angka

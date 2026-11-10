@@ -173,6 +173,7 @@ class LedgerServiceIntegrationTest {
                 .build();
 
         ledgerService.processMultiTenderPayment(request1);
+        journalTransactionRepository.flush();
 
         // When & Then - second request with same idempotency key should fail
         CheckoutRequest request2 = CheckoutRequest.builder()
@@ -188,8 +189,10 @@ class LedgerServiceIntegrationTest {
                         .build()))
                 .build();
 
-        assertThatThrownBy(() -> ledgerService.processMultiTenderPayment(request2))
-                .isInstanceOf(RuntimeException.class); // unique constraint violation or application-level
+        assertThatThrownBy(() -> {
+            ledgerService.processMultiTenderPayment(request2);
+            journalTransactionRepository.flush();
+        }).isInstanceOf(RuntimeException.class); // unique constraint violation
     }
 
     @Test

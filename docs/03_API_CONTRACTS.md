@@ -14,6 +14,7 @@ All endpoints are prefixed with `/api/v1`.
 - `GET /ledger/transactions/{transactionId}`: Transaction detail with debit/credit entries.
 - `POST /ledger/transactions/{transactionId}/reverse`: Reversal/refund via compensating journal (ADMIN).
 - `GET /accounts/{accountId}/mutations`: Per-account audit history (paginated).
+- `POST /vouchers`, `GET /vouchers`, `GET /vouchers/{id}`, `PATCH /vouchers/{id}/status`, `POST /vouchers/{id}/redeem`.
 - `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
 - CORS: origin frontend diatur via `app.cors.allowed-origins`.
 

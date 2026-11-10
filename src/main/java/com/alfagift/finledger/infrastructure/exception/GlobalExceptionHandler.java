@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -109,6 +110,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Invalid Request Parameter",
                 ApiErrorCodes.INVALID_REQUEST,
                 "Nilai parameter '" + ex.getName() + "' tidak valid: " + ex.getValue(), null, request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ProblemDetailResponse> handleAccessDenied(
+            AccessDeniedException ex, WebRequest request) {
+        return build(HttpStatus.FORBIDDEN, "Forbidden",
+                ApiErrorCodes.FORBIDDEN, ex.getMessage(), null, request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -70,7 +70,7 @@ Origin yang diizinkan diatur dengan `CORS_ALLOWED_ORIGINS`
 | Kebutuhan FE | Status |
 |---|---|
 | Registrasi user mandiri | ❌ belum (user inti dari konfigurasi) |
-| Katalog & stok voucher | ❌ belum (redeem hanya memotong poin) |
+| Katalog voucher & redeem | ✅ (`/api/v1/vouchers`) |
 | Notifikasi/websocket status pembayaran | ❌ belum |
 | Endpoint upload bukti bayar | ❌ belum (rencana S3/MinIO) |
 | Laporan settlement merchant | ❌ belum |
@@ -88,5 +88,5 @@ Origin yang diizinkan diatur dengan `CORS_ALLOWED_ORIGINS`
 - [x] CORS
 - [x] Error contract konsisten + correlation ID
 - [ ] Registrasi & manajemen user penuh
-- [ ] Voucher catalog/quota
+- [x] Voucher catalog/quota
 - [ ] Upload bukti bayar

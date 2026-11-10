@@ -24,8 +24,12 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] k6 + harness konkurensi lokal; bukti di `docs/05_LOAD_TEST_PROOFS.md`.
 - [x] SpotBugs + OWASP Dependency-Check profile di CI.
 - [x] Sprint E lokal: reversal/refund, mutasi paginated, filter transaksi, CORS, refresh token.
+- [x] Fase F: CI green (docker `api.version`), JaCoCo >= 50% (aktual 80.9%), ArchUnit.
+- [x] Fase G: domain voucher (katalog, kuota atomik, anti-overselling, unique redeem).
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Actuator dashboards (Prometheus/Grafana).
-- [ ] Database-backed user store + registration.
-- [ ] Cloud deployment (Cloud Run + Cloud SQL) + smoke test live.
+- [ ] Fase H: User DB + registrasi.
+- [ ] Fase I: Settlement & reconciliation.
+- [ ] Fase J: Blob storage / bukti bayar.
+- [ ] Fase K: Observability (Prometheus/Grafana).
+- [ ] Fase L: Cloud deployment.

@@ -173,6 +173,11 @@ curl http://localhost:8080/api/v1/ledger/accounts \
 | `POST` | `/api/v1/auth/logout` | Cabut refresh token | ✅ |
 | `GET` | `/api/v1/auth/me` | Identitas dari token aktif | ✅ |
 | `GET` | `/api/v1/ledger/accounts/{accountId}/mutations` | Mutasi akun (paginated) | ✅ |
+| `POST` | `/api/v1/vouchers` | Buat voucher (ADMIN) | ✅ |
+| `GET` | `/api/v1/vouchers` | Katalog voucher (filter + pagination) | ✅ |
+| `GET` | `/api/v1/vouchers/{voucherId}` | Detail voucher | ✅ |
+| `PATCH` | `/api/v1/vouchers/{voucherId}/status` | Aktifkan/nonaktifkan voucher (ADMIN) | ✅ |
+| `POST` | `/api/v1/vouchers/{voucherId}/redeem` | Redeem voucher kuota terbatas | ✅ |
 
 **Kontrak lintas-endpoint:**
 - `POST`/`PATCH` wajib `X-Idempotency-Key`. Retry identik mengembalikan respons sukses yang sama (cached), payload berbeda → `409`.

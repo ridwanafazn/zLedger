@@ -22,8 +22,8 @@
 | C | RFC 7807, idempotency sejati, transaksi, observability | ✅ | `355a570`…`49e63c1` |
 | D | JWT/RBAC, Outbox, load proof, CI/static analysis | ✅ | `b3f2592`…`302cda2` |
 | E | Reversal, mutasi paginated, filter, CORS, refresh token | ✅ | `80c9cbe` |
-| F | CI green + quality gate (JaCoCo, ArchUnit) | 🚧 | — |
-| G | Domain voucher & flash sale nyata | ⏳ | — |
+| F | CI green + quality gate (JaCoCo, ArchUnit) | ✅ | `72a3251` + perbaikan `api.version` |
+| G | Domain voucher & flash sale nyata | ✅ | commit Fase G |
 | H | User DB + registrasi | ⏳ | — |
 | I | Settlement & reconciliation | ⏳ | — |
 | J | Blob storage / bukti bayar | ⏳ | — |
@@ -54,16 +54,16 @@
 ## Known Issues / Utang Teknis
 
 1. User masih dari konfigurasi (`app.security.users`) → Fase H.
-2. Voucher belum dimodelkan → Fase G.
-3. Settlement/reconciliation belum ada → Fase I.
-4. Upload bukti bayar belum ada → Fase J.
-5. `GET /accounts/{id}/mutations` tidak memvalidasi akun ada/tidak (mengembalikan halaman kosong).
-6. Idempotency `redeem` hanya efektif bila klien mengirim header (bukan query param).
-7. SpotBugs report-only (belum fail build).
+2. Settlement/reconciliation belum ada → Fase I.
+3. Upload bukti bayar belum ada → Fase J.
+4. `GET /accounts/{id}/mutations` tidak memvalidasi akun ada/tidak (mengembalikan halaman kosong).
+5. Idempotency `redeem` (legacy) hanya efektif bila klien mengirim header.
+6. SpotBugs report-only (belum fail build).
 
 ## Riwayat Perubahan
 
 | Tanggal | Perubahan |
 |---|---|
 | 2026-11-10 | Fase A–E selesai; 93 test hijau; push `80c9cbe` |
-| 2026-11-10 | Fase F: fix CI `DOCKER_API_VERSION`, JaCoCo 50%, ArchUnit, artefak laporan |
+| 2026-11-10 | Fase F: fix CI (`api.version=1.43`), JaCoCo 50% (aktual 80.9%), ArchUnit 4 rule, artefak laporan |
+| 2026-11-10 | Fase G: domain voucher (kuota atomik, unique redeem per user), 114 unit + 6 integration hijau, bukti 50 paralel kuota 10 |
