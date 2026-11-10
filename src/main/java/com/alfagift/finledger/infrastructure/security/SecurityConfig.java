@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <p>
  * Matriks otorisasi:
  * <ul>
- *   <li>Publik: login, register, refresh, Swagger/OpenAPI, health/info</li>
+ *   <li>Publik: login, register, refresh, logout, Swagger/OpenAPI, health/info</li>
  *   <li>{@code /api/v1/users/**}: ADMIN</li>
  *   <li>{@code PATCH /accounts/*&#47;status} dan {@code POST /accounts}: ADMIN</li>
  *   <li>{@code POST /checkout} dan {@code POST /redeem}: CUSTOMER/MERCHANT/ADMIN</li>
@@ -41,7 +41,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
-                                "/api/v1/auth/refresh",
+                                "/api/v1/auth/refresh", "/api/v1/auth/logout",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
                                 "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/api/v1/users/**").hasRole("ADMIN")

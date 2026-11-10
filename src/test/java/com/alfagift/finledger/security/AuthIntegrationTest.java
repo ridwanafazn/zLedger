@@ -175,6 +175,32 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"));
     }
 
+    @Test
+    @DisplayName("Logout tetap bisa dipanggil tanpa access token dan mencabut refresh token")
+    void logoutWithoutAccessToken_shouldRevokeRefreshToken() throws Exception {
+        String username = "logout" + UUID.randomUUID().toString().substring(0, 8);
+        String password = "rahasia123";
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"%s","password":"%s"}
+                                """.formatted(username, password)))
+                .andExpect(status().isCreated());
+
+        String refreshToken = login(username, password).get("refreshToken").asText();
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private JsonNode login(String username, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

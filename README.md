@@ -131,7 +131,7 @@ http://localhost:8080/v3/api-docs
 
 ## Autentikasi & Otorisasi
 
-Semua endpoint (kecuali registrasi, login, refresh, dan dokumentasi) memerlukan JWT.
+Semua endpoint (kecuali registrasi, login, refresh, logout, dan dokumentasi) memerlukan JWT.
 
 ```bash
 # 0) Registrasi pengguna baru (role otomatis CUSTOMER)
