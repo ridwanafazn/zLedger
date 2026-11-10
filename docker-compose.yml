@@ -70,7 +70,8 @@ services:
     depends_on:
       - redis
     healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      # cp-kafka menyediakan script di /usr/bin tanpa akhiran .sh
+      test: ["CMD-SHELL", "/usr/bin/kafka-topics --bootstrap-server localhost:9092 --list >/dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
