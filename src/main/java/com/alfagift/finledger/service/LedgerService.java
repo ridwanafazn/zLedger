@@ -2,6 +2,9 @@ package com.alfagift.finledger.service;
 
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.TransactionDetailResponse;
+import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,4 +53,19 @@ public interface LedgerService {
      * @return senarai mutasi akaun
      */
     java.util.List<com.alfagift.finledger.domain.entities.LedgerEntry> getAccountMutations(UUID accountId);
+
+    /**
+     * Daftar transaksi jurnal (paginated), terbaru lebih dulu.
+     *
+     * @param page          nomor halaman (0-based)
+     * @param size          ukuran halaman (maks 100)
+     * @param referenceType filter opsional (PAYMENT/REDEMPTION/REFUND/REWARD)
+     * @return halaman transaksi
+     */
+    PageResponse<TransactionSummaryResponse> listTransactions(int page, int size, String referenceType);
+
+    /**
+     * Detail satu transaksi beserta seluruh entri debit/credit.
+     */
+    TransactionDetailResponse getTransaction(UUID transactionId);
 }

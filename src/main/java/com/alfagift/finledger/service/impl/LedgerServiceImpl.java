@@ -11,6 +11,9 @@ import com.alfagift.finledger.domain.entities.LedgerEntry;
 import com.alfagift.finledger.domain.events.PointsAwardedEvent;
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.TransactionDetailResponse;
+import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.AccountInactiveException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.kafka.LoyaltyPointsProducer;
@@ -18,9 +21,14 @@ import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
 import com.alfagift.finledger.service.LedgerService;
+import io.micrometer.core.annotation.Timed;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +62,7 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     @Transactional
+    @Timed(value = "ledger.checkout", description = "Latency proses checkout multi-tender")
     public CheckoutResponse processMultiTenderPayment(CheckoutRequest request) {
         log.info("Memproses pembayaran multi-tender untuk ownerId={}, total={} {}",
                 request.getOwnerId(), request.getTotalAmount(), request.getCurrency());
@@ -142,6 +151,7 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     @Transactional
+    @Timed(value = "ledger.redeem", description = "Latency redeem flash sale")
     public CheckoutResponse redeemFlashSale(String ownerId, UUID voucherId, Integer points, String idempotencyKey) {
         log.info("Flash sale redemption: ownerId={}, voucherId={}, points={}", ownerId, voucherId, points);
 
@@ -207,6 +217,112 @@ public class LedgerServiceImpl implements LedgerService {
     @Override
     public List<LedgerEntry> getAccountMutations(UUID accountId) {
         return ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<TransactionSummaryResponse> listTransactions(int page, int size, String referenceType) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Page<JournalTransaction> transactions = (referenceType == null || referenceType.isBlank())
+                ? journalTransactionRepository.findAll(pageable)
+                : journalTransactionRepository.findByReferenceType(parseReferenceType(referenceType), pageable);
+
+        List<TransactionSummaryResponse> content = transactions.getContent().stream()
+                .map(this::toSummary)
+                .toList();
+
+        PageResponse.PageMetadata metadata = PageResponse.PageMetadata.builder()
+                .number(transactions.getNumber())
+                .size(transactions.getSize())
+                .totalElements(transactions.getTotalElements())
+                .totalPages(transactions.getTotalPages())
+                .first(transactions.isFirst())
+                .last(transactions.isLast())
+                .numberOfElements(transactions.getNumberOfElements())
+                .build();
+
+        return PageResponse.<TransactionSummaryResponse>builder()
+                .content(content)
+                .page(metadata)
+                .sort(List.of(PageResponse.SortInfo.builder()
+                        .field("createdAt")
+                        .direction("DESC")
+                        .build()))
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TransactionDetailResponse getTransaction(UUID transactionId) {
+        JournalTransaction journal = journalTransactionRepository.findById(transactionId)
+                .orElseThrow(() -> new EntityNotFoundException("Transaksi tidak ditemukan: " + transactionId));
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findByJournalTransactionId(transactionId);
+
+        BigDecimal totalDebit = entries.stream()
+                .filter(e -> e.getEntryType() == EntryType.DEBIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalCredit = entries.stream()
+                .filter(e -> e.getEntryType() == EntryType.CREDIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        List<TransactionDetailResponse.Entry> entryDtos = entries.stream()
+                .map(e -> TransactionDetailResponse.Entry.builder()
+                        .id(e.getId())
+                        .accountId(e.getAccount().getId())
+                        .ownerId(e.getAccount().getOwnerId())
+                        .accountType(e.getAccount().getAccountType())
+                        .currency(e.getAccount().getCurrency())
+                        .entryType(e.getEntryType())
+                        .amount(e.getAmount())
+                        .createdAt(e.getCreatedAt())
+                        .build())
+                .toList();
+
+        return TransactionDetailResponse.builder()
+                .id(journal.getId())
+                .idempotencyKey(journal.getIdempotencyKey())
+                .referenceType(journal.getReferenceType())
+                .description(journal.getDescription())
+                .createdAt(journal.getCreatedAt())
+                .totalDebit(totalDebit)
+                .totalCredit(totalCredit)
+                .balanced(totalDebit.compareTo(totalCredit) == 0)
+                .entries(entryDtos)
+                .build();
+    }
+
+    private TransactionSummaryResponse toSummary(JournalTransaction journal) {
+        BigDecimal totalAmount = journal.getLedgerEntries().stream()
+                .filter(e -> e.getEntryType() == EntryType.DEBIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return TransactionSummaryResponse.builder()
+                .id(journal.getId())
+                .idempotencyKey(journal.getIdempotencyKey())
+                .referenceType(journal.getReferenceType())
+                .description(journal.getDescription())
+                .createdAt(journal.getCreatedAt())
+                .entryCount(journal.getLedgerEntries().size())
+                .totalAmount(totalAmount)
+                .build();
+    }
+
+    private ReferenceType parseReferenceType(String raw) {
+        try {
+            return ReferenceType.valueOf(raw.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Nilai referenceType tidak valid: '%s'. Pilihan yang tersedia: %s",
+                    raw, java.util.Arrays.toString(ReferenceType.values())));
+        }
     }
 
     /* ------------------------------------------------------------------ */

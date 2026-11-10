@@ -19,6 +19,7 @@ import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
 import com.alfagift.finledger.service.LedgerService;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -465,6 +466,90 @@ class LedgerServiceImplTest {
                 .isInstanceOf(AccountInactiveException.class);
 
         verify(journalTransactionRepository, never()).save(any(JournalTransaction.class));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Sprint C: query transaksi                                           */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("listTransactions harus memetakan ringkasan dan total debit")
+    void listTransactions_shouldMapSummary() {
+        JournalTransaction journal = JournalTransaction.builder()
+                .id(UUID.randomUUID())
+                .idempotencyKey("idem-list-001")
+                .referenceType(ReferenceType.PAYMENT)
+                .description("Pembayaran")
+                .createdAt(java.time.LocalDateTime.now())
+                .build();
+        journal.addLedgerEntry(LedgerEntry.builder()
+                .journalTransaction(journal).account(customerAccount)
+                .entryType(EntryType.DEBIT).amount(new BigDecimal("50000.00")).build());
+        journal.addLedgerEntry(LedgerEntry.builder()
+                .journalTransaction(journal).account(merchantAccount)
+                .entryType(EntryType.CREDIT).amount(new BigDecimal("50000.00")).build());
+
+        when(journalTransactionRepository.findAll(any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        List.of(journal), org.springframework.data.domain.PageRequest.of(0, 20), 1));
+
+        var page = ledgerService.listTransactions(0, 20, null);
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).getEntryCount()).isEqualTo(2);
+        assertThat(page.getContent().get(0).getTotalAmount()).isEqualByComparingTo("50000.00");
+        assertThat(page.getContent().get(0).getReferenceType()).isEqualTo(ReferenceType.PAYMENT);
+        assertThat(page.getPage().getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("listTransactions harus menolak referenceType tidak valid")
+    void listTransactions_shouldRejectInvalidReferenceType() {
+        assertThatThrownBy(() -> ledgerService.listTransactions(0, 20, "FOO"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("referenceType");
+
+        verify(journalTransactionRepository, never()).findAll(any(org.springframework.data.domain.Pageable.class));
+    }
+
+    @Test
+    @DisplayName("getTransaction harus mengembalikan detail dan menandai balanced")
+    void getTransaction_shouldReturnBalancedDetail() {
+        UUID transactionId = UUID.randomUUID();
+        JournalTransaction journal = JournalTransaction.builder()
+                .id(transactionId)
+                .idempotencyKey("idem-detail-001")
+                .referenceType(ReferenceType.PAYMENT)
+                .build();
+
+        LedgerEntry debit = LedgerEntry.builder()
+                .id(UUID.randomUUID()).journalTransaction(journal).account(customerAccount)
+                .entryType(EntryType.DEBIT).amount(new BigDecimal("50000.00")).build();
+        LedgerEntry credit = LedgerEntry.builder()
+                .id(UUID.randomUUID()).journalTransaction(journal).account(merchantAccount)
+                .entryType(EntryType.CREDIT).amount(new BigDecimal("50000.00")).build();
+
+        when(journalTransactionRepository.findById(transactionId)).thenReturn(Optional.of(journal));
+        when(ledgerEntryRepository.findByJournalTransactionId(transactionId))
+                .thenReturn(List.of(debit, credit));
+
+        var detail = ledgerService.getTransaction(transactionId);
+
+        assertThat(detail.isBalanced()).isTrue();
+        assertThat(detail.getTotalDebit()).isEqualByComparingTo("50000.00");
+        assertThat(detail.getTotalCredit()).isEqualByComparingTo("50000.00");
+        assertThat(detail.getEntries()).hasSize(2);
+        assertThat(detail.getEntries().get(0).getOwnerId()).isEqualTo("cust-001");
+    }
+
+    @Test
+    @DisplayName("getTransaction transaksi tidak ada harus melempar EntityNotFoundException")
+    void getTransaction_notFound_shouldThrow() {
+        UUID transactionId = UUID.randomUUID();
+        when(journalTransactionRepository.findById(transactionId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> ledgerService.getTransaction(transactionId))
+                .isInstanceOf(EntityNotFoundException.class);
     }
 
     /* ------------------------------------------------------------------ */

@@ -1,13 +1,18 @@
 package com.alfagift.finledger.controller;
 
 import com.alfagift.finledger.domain.enums.Currency;
+import com.alfagift.finledger.domain.enums.ReferenceType;
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutRequest.TenderDetail;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.TransactionDetailResponse;
+import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.IdempotencyRejectedException;
 import com.alfagift.finledger.infrastructure.exception.GlobalExceptionHandler;
 import com.alfagift.finledger.service.LedgerService;
+import jakarta.persistence.EntityNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -177,7 +182,7 @@ class LedgerControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("BALANCE_INSUFFICIENT"));
+                .andExpect(jsonPath("$.errorCode").value("BALANCE_INSUFFICIENT"));
     }
 
     @Test
@@ -206,7 +211,7 @@ class LedgerControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("IDEMPOTENCY_REJECTED"));
+                .andExpect(jsonPath("$.errorCode").value("IDEMPOTENCY_REJECTED"));
     }
 
     @Test
@@ -221,6 +226,93 @@ class LedgerControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("VALIDATION_ERROR"));
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Sprint C: endpoint transaksi                                        */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("GET /transactions harus mengembalikan halaman transaksi")
+    void listTransactions_shouldReturnPage() throws Exception {
+        PageResponse<TransactionSummaryResponse> page = PageResponse.<TransactionSummaryResponse>builder()
+                .content(List.of(TransactionSummaryResponse.builder()
+                        .id(UUID.randomUUID())
+                        .idempotencyKey("idem-001")
+                        .referenceType(ReferenceType.PAYMENT)
+                        .entryCount(2)
+                        .totalAmount(new BigDecimal("50000.00"))
+                        .build()))
+                .page(PageResponse.PageMetadata.builder()
+                        .number(0).size(20).totalElements(1).totalPages(1)
+                        .first(true).last(true).numberOfElements(1)
+                        .build())
+                .sort(List.of(PageResponse.SortInfo.builder()
+                        .field("createdAt").direction("DESC").build()))
+                .build();
+
+        when(ledgerService.listTransactions(0, 20, null)).thenReturn(page);
+
+        mockMvc.perform(get("/api/v1/ledger/transactions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].entryCount").value(2))
+                .andExpect(jsonPath("$.content[0].referenceType").value("PAYMENT"));
+    }
+
+    @Test
+    @DisplayName("GET /transactions?referenceType=PAYMENT harus meneruskan filter")
+    void listTransactions_shouldForwardReferenceTypeFilter() throws Exception {
+        PageResponse<TransactionSummaryResponse> empty = PageResponse.<TransactionSummaryResponse>builder()
+                .content(List.of())
+                .page(PageResponse.PageMetadata.builder()
+                        .number(0).size(20).totalElements(0).totalPages(0)
+                        .first(true).last(true).numberOfElements(0)
+                        .build())
+                .sort(List.of())
+                .build();
+
+        when(ledgerService.listTransactions(0, 20, "PAYMENT")).thenReturn(empty);
+
+        mockMvc.perform(get("/api/v1/ledger/transactions").param("referenceType", "PAYMENT"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("GET /transactions/{id} harus mengembalikan detail dengan status balanced")
+    void getTransaction_shouldReturnDetail() throws Exception {
+        UUID transactionId = UUID.randomUUID();
+
+        TransactionDetailResponse detail = TransactionDetailResponse.builder()
+                .id(transactionId)
+                .idempotencyKey("idem-001")
+                .referenceType(ReferenceType.PAYMENT)
+                .totalDebit(new BigDecimal("50000.00"))
+                .totalCredit(new BigDecimal("50000.00"))
+                .balanced(true)
+                .entries(List.of())
+                .build();
+
+        when(ledgerService.getTransaction(transactionId)).thenReturn(detail);
+
+        mockMvc.perform(get("/api/v1/ledger/transactions/{id}", transactionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.balanced").value(true))
+                .andExpect(jsonPath("$.totalDebit").value(50000.00));
+    }
+
+    @Test
+    @DisplayName("GET /transactions/{id} tidak ditemukan harus 404 problem+json")
+    void getTransaction_notFound_shouldReturn404() throws Exception {
+        UUID transactionId = UUID.randomUUID();
+
+        when(ledgerService.getTransaction(transactionId))
+                .thenThrow(new EntityNotFoundException("Transaksi tidak ditemukan: " + transactionId));
+
+        mockMvc.perform(get("/api/v1/ledger/transactions/{id}", transactionId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("NOT_FOUND"))
+                .andExpect(jsonPath("$.type").exists())
+                .andExpect(jsonPath("$.instance").exists());
     }
 }

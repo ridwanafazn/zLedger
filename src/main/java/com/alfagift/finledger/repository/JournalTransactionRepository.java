@@ -1,6 +1,9 @@
 package com.alfagift.finledger.repository;
 
 import com.alfagift.finledger.domain.entities.JournalTransaction;
+import com.alfagift.finledger.domain.enums.ReferenceType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import java.util.Optional;
@@ -19,4 +22,9 @@ public interface JournalTransactionRepository extends JpaRepository<JournalTrans
     Optional<JournalTransaction> findByIdempotencyKey(String key);
 
     boolean existsByIdempotencyKey(String idempotencyKey);
+
+    /**
+     * Daftar transaksi berdasarkan jenis referensi (paginated).
+     */
+    Page<JournalTransaction> findByReferenceType(ReferenceType referenceType, Pageable pageable);
 }

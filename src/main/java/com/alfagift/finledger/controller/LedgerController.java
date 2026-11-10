@@ -2,6 +2,9 @@ package com.alfagift.finledger.controller;
 
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.TransactionDetailResponse;
+import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.domain.entities.LedgerEntry;
 import com.alfagift.finledger.service.LedgerService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -123,5 +126,51 @@ public class LedgerController {
             @PathVariable UUID accountId) {
         List<LedgerEntry> mutations = ledgerService.getAccountMutations(accountId);
         return ResponseEntity.ok(mutations);
+    }
+
+    /**
+     * Daftar transaksi jurnal (paginated) untuk audit.
+     */
+    @Operation(
+            summary = "Daftar transaksi jurnal",
+            description = "Ambil daftar transaksi jurnal terbaru dengan pagination dan filter jenis referensi."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Halaman transaksi",
+                    content = @Content(schema = @Schema(implementation = PageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Parameter tidak valid")
+    })
+    @GetMapping("/transactions")
+    public ResponseEntity<PageResponse<TransactionSummaryResponse>> listTransactions(
+            @Parameter(description = "Halaman (0-based)", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+
+            @Parameter(description = "Ukuran halaman (maks 100)", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+
+            @Parameter(description = "Filter jenis referensi (PAYMENT/REDEMPTION/REFUND/REWARD)")
+            @RequestParam(required = false) String referenceType) {
+
+        return ResponseEntity.ok(ledgerService.listTransactions(page, size, referenceType));
+    }
+
+    /**
+     * Detail satu transaksi beserta seluruh entri debit/credit (audit trail).
+     */
+    @Operation(
+            summary = "Detail transaksi jurnal",
+            description = "Ambil detail transaksi beserta semua entri debit/credit dan verifikasi keseimbangan."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Detail transaksi",
+                    content = @Content(schema = @Schema(implementation = TransactionDetailResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Transaksi tidak ditemukan")
+    })
+    @GetMapping("/transactions/{transactionId}")
+    public ResponseEntity<TransactionDetailResponse> getTransaction(
+            @Parameter(description = "ID transaksi", example = "550e8400-e29b-41d4-a716-446655440000")
+            @PathVariable UUID transactionId) {
+
+        return ResponseEntity.ok(ledgerService.getTransaction(transactionId));
     }
 }

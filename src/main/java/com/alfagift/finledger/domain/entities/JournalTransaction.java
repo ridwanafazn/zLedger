@@ -54,6 +54,7 @@ public class JournalTransaction {
     private LocalDateTime createdAt;
 
     @Builder.Default
+    @org.hibernate.annotations.BatchSize(size = 50)
     @OneToMany(mappedBy = "journalTransaction", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LedgerEntry> ledgerEntries = new ArrayList<>();
 
