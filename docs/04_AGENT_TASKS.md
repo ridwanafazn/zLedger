@@ -19,9 +19,9 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] RFC 7807 problem details, correlation ID, OpenAPI metadata, checkout metrics.
 - [x] `GET /transactions` and `GET /transactions/{id}`.
 - [x] Kafka healthcheck fixed; integration tests isolated via Failsafe.
+- [x] Spring Security + JWT + RBAC (`/api/v1/auth/login`, role ADMIN/MERCHANT/CUSTOMER).
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Spring Security & JWT Implementation.
 - [ ] Transactional Outbox for Kafka reliability.
 - [ ] Actuator Custom Metrics (TPS, Error Rates) & dashboards.
 - [ ] Reversal/Refund Ledger Logic.

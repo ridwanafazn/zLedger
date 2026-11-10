@@ -128,6 +128,31 @@ http://localhost:8080/v3/api-docs
 
 ---
 
+## Autentikasi & Otorisasi
+
+Semua endpoint (kecuali login dan dokumentasi) memerlukan JWT.
+
+```bash
+# 1) Login
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 2) Gunakan token
+curl http://localhost:8080/api/v1/ledger/accounts \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+| Role | Akun demo | Izin |
+|------|-----------|------|
+| `ADMIN` | `admin` / `admin123` | Semua endpoint, termasuk `POST /accounts` dan `PATCH /status` |
+| `MERCHANT` | `merchant` / `merchant123` | Checkout & redeem |
+| `CUSTOMER` | `customer` / `customer123` | Checkout & redeem, baca data |
+
+> Kredensial demo dapat ditimpa lewat environment (`ADMIN_PASSWORD`, dst) dan `JWT_SECRET`.
+> Di Swagger UI, klik **Authorize** dan tempel token untuk mencoba endpoint terproteksi.
+> Error 401/403 juga berformat RFC 7807.
+
 ## Endpoint API (Ringkasan)
 
 | Method | Endpoint | Deskripsi | Status |

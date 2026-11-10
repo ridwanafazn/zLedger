@@ -8,6 +8,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -93,6 +94,14 @@ public class GlobalExceptionHandler {
                 "Header wajib tidak ditemukan: " + ex.getHeaderName(), null, request);
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ProblemDetailResponse> handleUnreadableBody(
+            HttpMessageNotReadableException ex, WebRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Malformed Request Body",
+                ApiErrorCodes.INVALID_REQUEST,
+                "Body request tidak dapat dibaca atau formatnya tidak valid", null, request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ProblemDetailResponse> handleValidation(
             MethodArgumentNotValidException ex, WebRequest request) {
@@ -111,6 +120,8 @@ public class GlobalExceptionHandler {
             case NOT_FOUND -> ApiErrorCodes.NOT_FOUND;
             case CONFLICT -> ApiErrorCodes.CONFLICT;
             case BAD_REQUEST -> ApiErrorCodes.INVALID_REQUEST;
+            case UNAUTHORIZED -> ApiErrorCodes.UNAUTHORIZED;
+            case FORBIDDEN -> ApiErrorCodes.FORBIDDEN;
             default -> status.is5xxServerError()
                     ? ApiErrorCodes.INTERNAL_SERVER_ERROR : ApiErrorCodes.INVALID_REQUEST;
         };

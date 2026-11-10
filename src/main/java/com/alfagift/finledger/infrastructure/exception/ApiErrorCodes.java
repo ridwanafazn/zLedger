@@ -14,6 +14,8 @@ public class ApiErrorCodes {
     public static final String INVALID_REQUEST = "INVALID_REQUEST";
     public static final String MISSING_HEADER = "MISSING_HEADER";
     public static final String CONFLICT = "CONFLICT";
+    public static final String UNAUTHORIZED = "UNAUTHORIZED";
+    public static final String FORBIDDEN = "FORBIDDEN";
 
     private ApiErrorCodes() {
     }
