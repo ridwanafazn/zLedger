@@ -4,10 +4,15 @@ All endpoints are prefixed with `/api/v1`.
 
 ## 1. Core Endpoints
 - `POST /accounts`: Create a new ledger wallet.
+- `GET /accounts/{id}`: Account detail.
 - `GET /accounts/{id}/balance`: Fetch current wallet balance.
+- `PATCH /accounts/{id}/status`: Change account status (ACTIVE/SUSPENDED/CLOSED).
+- `GET /accounts`: Search with filters + pagination.
 - `POST /ledger/checkout`: Process a multi-tender transaction.
 - `POST /ledger/flash-sale/redeem`: High-concurrency voucher redemption.
-- `GET /transactions/{accountId}`: Paginated ledger audit history.
+- `GET /ledger/transactions`: Paginated journal list.
+- `GET /ledger/transactions/{transactionId}`: Transaction detail with debit/credit entries.
+- `GET /accounts/{accountId}/mutations`: Per-account audit history.
 
 ## 2. The Idempotency Promise
 Mobile devs MUST include the `X-Idempotency-Key` header on all `POST` and `PATCH` requests. 

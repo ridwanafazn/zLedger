@@ -8,18 +8,21 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] Phase 2: PostgreSQL, Redis, Kafka via Docker Compose.
 - [x] Phase 3: Core Ledger Domain Entities & Flyway (V1 & V2).
 - [x] Phase 4: `Account` & `Ledger` Services & Controllers.
-- [x] Phase 5: Concurrency Safety (JPA Pessimistic Locking).
+- [x] Phase 5: Concurrency Safety (JPA Pessimistic Locking + deterministic lock order).
 - [x] Phase 6: Kafka Producer/Consumer (`PointsAwardedEvent`).
 
-## 🚧 CURRENT SPRINT: Hardening & Bug Fixes (Execute these NOW)
-1. **Fix Swagger 500 Error:** Diagnose and fix the `/v3/api-docs` crashing issue (ensure `springdoc-openapi-starter-webmvc-ui` v2.x is configured correctly for Spring Boot 3.4).
-2. **Fix Account Filter:** Wire the `accountType` parameter correctly in `AccountController.searchAccounts` so it doesn't pass `null` to the service.
-3. **Enforce Idempotency:** Apply the `@Idempotent` annotation to `AccountService.createAccount` and `updateStatus`.
-4. **Test Coverage:** Write `AccountServiceImplTest` (Mockito) and `AccountControllerTest` (MockMvc). Run `mvn clean test` to verify.
-5. **Git Commit:** Stage and commit these specific fixes.
+## ✅ HARDENING SPRINTS (done)
+- [x] Swagger `/v3/api-docs` fixed (springdoc 2.7.0).
+- [x] Account filter wiring + strict enum validation (400).
+- [x] Idempotency enforced on Account & Ledger mutations (cached response + fingerprint).
+- [x] Test coverage: account service/controller, ledger locking/status guard.
+- [x] RFC 7807 problem details, correlation ID, OpenAPI metadata, checkout metrics.
+- [x] `GET /transactions` and `GET /transactions/{id}`.
+- [x] Kafka healthcheck fixed; integration tests isolated via Failsafe.
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Implement `GET /transactions` and `GET /transactions/{id}`.
 - [ ] Spring Security & JWT Implementation.
-- [ ] Actuator Custom Metrics (TPS, Error Rates).
+- [ ] Transactional Outbox for Kafka reliability.
+- [ ] Actuator Custom Metrics (TPS, Error Rates) & dashboards.
 - [ ] Reversal/Refund Ledger Logic.
+- [ ] k6 load test proofs (docs/05).

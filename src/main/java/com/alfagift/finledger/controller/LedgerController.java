@@ -77,8 +77,8 @@ public class LedgerController {
     public ResponseEntity<CheckoutResponse> checkout(
             @Parameter(hidden = true) @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CheckoutRequest request) {
-        // Pastikan idempotency key dari header digunakan jika kosong di body
-        if (request.getIdempotencyKey() == null && idempotencyKey != null) {
+        // Header adalah sumber kebenaran idempotency (dipakai AOP); body hanya fallback.
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             request.setIdempotencyKey(idempotencyKey);
         }
         CheckoutResponse response = ledgerService.processMultiTenderPayment(request);
@@ -103,8 +103,14 @@ public class LedgerController {
             @RequestParam @NotBlank String ownerId,
             @RequestParam @NotNull UUID voucherId,
             @RequestParam @NotNull Integer points,
-            @RequestParam @NotBlank String idempotencyKey) {
-        CheckoutResponse response = ledgerService.redeemFlashSale(ownerId, voucherId, points, idempotencyKey);
+            @RequestParam(required = false) String idempotencyKey,
+            @Parameter(hidden = true) @RequestHeader(value = "X-Idempotency-Key", required = false) String headerKey) {
+        String effectiveKey = (headerKey != null && !headerKey.isBlank()) ? headerKey : idempotencyKey;
+        if (effectiveKey == null || effectiveKey.isBlank()) {
+            throw new IllegalArgumentException(
+                    "idempotencyKey wajib dikirim via header X-Idempotency-Key atau query param");
+        }
+        CheckoutResponse response = ledgerService.redeemFlashSale(ownerId, voucherId, points, effectiveKey);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 

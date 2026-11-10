@@ -3,7 +3,7 @@
 > **High-concurrency, double-entry ledger backend** simulating Alfagift's A-Poin and Multi-Tender payment system.
 > Built as a portfolio-grade backend engineering project for **PT Global Loyalty Indonesia (GLI)** — Yogyakarta.
 
-[![Java 25](https://img.shields.io/badge/Java-25%20LTS-007396?logo=java)](https://openjdk.org/projects/jdk/25/)
+[![Java 21](https://img.shields.io/badge/Java-21%20LTS-007396?logo=java)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F?logo=spring-boot)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis)](https://redis.io/)
@@ -52,14 +52,15 @@ com.alfagift.finledger
 
 | Layer | Teknologi | Versi |
 |-------|-----------|-------|
-| Bahasa | Java | 25 LTS |
+| Bahasa | Java | 21 LTS |
 | Framework | Spring Boot | 3.4 |
 | Database | PostgreSQL | 16 |
 | Cache / Lock | Redis + Redisson | 7 / 3.33 |
 | Message Broker | Apache Kafka | 4.x (KRaft) |
-| API Docs | Springdoc OpenAPI | 2.6.0 |
+| API Docs | Springdoc OpenAPI | 2.7.0 |
+| Migrasi DB | Flyway | 10.17.1 |
 | Build | Maven | 3.10+ |
-| Ujian | JUnit 5, Mockito, Testcontainers | Latest |
+| Ujian | JUnit 5, Mockito, Testcontainers | 1.21.x |
 
 ---
 
@@ -70,7 +71,7 @@ com.alfagift.finledger
 Pastikan berikut dipasang di sistem anda:
 
 ```bash
-java --version      # Java 25 LTS
+java --version      # Java 21 LTS
 mvn --version       # Maven 3.10+
 docker --version    # Docker Desktop
 docker compose version
@@ -134,9 +135,19 @@ http://localhost:8080/v3/api-docs
 | `POST` | `/api/v1/ledger/checkout` | Pembayaran multi-tender (IDR + A_Poin) | ✅ |
 | `POST` | `/api/v1/ledger/redeem` | Tebasan flash sale (A_Poin) | ✅ |
 | `GET` | `/api/v1/ledger/accounts/{accountId}/mutations` | Sejarah mutasi akaun | ✅ |
+| `POST` | `/api/v1/ledger/accounts` | Buat akun ledger | ✅ |
+| `GET` | `/api/v1/ledger/accounts/{accountId}` | Detail akun | ✅ |
+| `GET` | `/api/v1/ledger/accounts/{accountId}/balance` | Inquiry saldo | ✅ |
+| `PATCH` | `/api/v1/ledger/accounts/{accountId}/status` | Ubah status (ACTIVE/SUSPENDED/CLOSED) | ✅ |
+| `GET` | `/api/v1/ledger/accounts` | Cari akun (filter + pagination) | ✅ |
+| `GET` | `/api/v1/ledger/transactions` | Daftar transaksi jurnal | ✅ |
+| `GET` | `/api/v1/ledger/transactions/{transactionId}` | Detail transaksi + entri debit/credit | ✅ |
 
-> **Spesifikasi lengkap** (semua endpoint terencana, state machine, katalog error code, edge case, dan kebutuhan FE) ada di
-> [`docs/API_SPEC.md`](docs/API_SPEC.md). Semua endpoint dilengkapi `@Operation`, `@ApiResponses`, dan contoh payload dalam Swagger UI.
+**Kontrak lintas-endpoint:**
+- `POST`/`PATCH` wajib `X-Idempotency-Key`. Retry identik mengembalikan respons sukses yang sama (cached), payload berbeda → `409`.
+- Semua error berformat **RFC 7807** (`application/problem+json`) dengan `type`, `title`, `detail`, `instance`, `errorCode`.
+- Setiap respons menyertakan `X-Request-ID` (dipakai juga di log).
+- Metrik checkout tersedia di `/actuator/metrics/ledger.checkout`.
 
 ---
 
@@ -144,10 +155,13 @@ http://localhost:8080/v3/api-docs
 
 | Dokumen | Isi |
 |---------|-----|
-| [`docs/API_SPEC.md`](docs/API_SPEC.md) | Spesifikasi API v1 (kontrak BE↔FE) |
-| [`docs/BLOB_STORAGE_DECISION.md`](docs/BLOB_STORAGE_DECISION.md) | Keputusan blob storage (MinIO + S3) |
+| [`docs/01_PRODUCT_VISION_TRD.md`](docs/01_PRODUCT_VISION_TRD.md) | Visi produk & technical requirements |
+| [`docs/02_ARCHITECTURE_DB.md`](docs/02_ARCHITECTURE_DB.md) | Arsitektur modular monolith & desain database |
+| [`docs/03_API_CONTRACTS.md`](docs/03_API_CONTRACTS.md) | Kontrak API, idempotency, RFC 7807 |
+| [`docs/04_AGENT_TASKS.md`](docs/04_AGENT_TASKS.md) | Roadmap eksekusi & status sprint |
+| [`docs/05_LOAD_TEST_PROOFS.md`](docs/05_LOAD_TEST_PROOFS.md) | Rencana bukti konkurensi & performa |
 | [`docs/ADR/`](docs/ADR/) | Architecture Decision Records |
-| [`PRD TRD.md`](PRD%20TRD.md) | Product & Technical Requirements |
+| [`PRD TRD.md`](PRD%20TRD.md) | Product & Technical Requirements (historis) |
 | [`ERD.md`](ERD.md) | Entity Relationship Diagram |
 | [`BUILD_MANIFEST.md`](BUILD_MANIFEST.md) | Bukti progres & roadmap |
 
@@ -156,12 +170,15 @@ http://localhost:8080/v3/api-docs
 ## Ujian
 
 ```bash
-# Unit test (Mockito)
+# Unit test (Mockito, MockMvc) — tidak butuh Docker
 mvn test
 
-# Integration test dengan Testcontainers (PostgreSQL + Redis)
+# Integration test dengan Testcontainers (PostgreSQL) — butuh Docker
 mvn verify
 ```
+
+> Unit test dijalankan oleh Surefire; integration test (`*IntegrationTest`) oleh Failsafe
+> pada fase `verify`, sehingga `mvn test` tetap hijau tanpa Docker.
 
 Laporan ujian akan ditimpan di `target/surefire-reports/`.
 

@@ -15,6 +15,7 @@ import com.alfagift.finledger.dto.PageResponse;
 import com.alfagift.finledger.dto.TransactionDetailResponse;
 import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.AccountInactiveException;
+import com.alfagift.finledger.infrastructure.Idempotent;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.kafka.LoyaltyPointsProducer;
 import com.alfagift.finledger.repository.AccountRepository;
@@ -62,6 +63,7 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     @Transactional
+    @Idempotent
     @Timed(value = "ledger.checkout", description = "Latency proses checkout multi-tender")
     public CheckoutResponse processMultiTenderPayment(CheckoutRequest request) {
         log.info("Memproses pembayaran multi-tender untuk ownerId={}, total={} {}",
@@ -151,6 +153,7 @@ public class LedgerServiceImpl implements LedgerService {
 
     @Override
     @Transactional
+    @Idempotent
     @Timed(value = "ledger.redeem", description = "Latency redeem flash sale")
     public CheckoutResponse redeemFlashSale(String ownerId, UUID voucherId, Integer points, String idempotencyKey) {
         log.info("Flash sale redemption: ownerId={}, voucherId={}, points={}", ownerId, voucherId, points);

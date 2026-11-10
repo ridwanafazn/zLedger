@@ -7,12 +7,13 @@ Modules are logically separated (e.g., `account`, `ledger`, `transaction`), pavi
 
 ## 2. Double-Entry Database Schema (PostgreSQL)
 
-### Table: `ledger_accounts`
+### Table: `accounts`
 Stores the balances. Locked pessimistically during transactions.
 - `id` (UUID, PK)
 - `owner_id` (VARCHAR): Belongs to User, Merchant, or System.
+- `account_name` (VARCHAR): Human-readable label.
 - `account_type` (ENUM): ASSET, LIABILITY, REVENUE, EXPENSE.
-- `currency` (ENUM): IDR, A_POINT, VOUCHER.
+- `currency` (ENUM): IDR, A_POIN.
 - `balance` (DECIMAL 19,4)
 - `status` (ENUM): ACTIVE, SUSPENDED, CLOSED.
 - `version` (BIGINT): JPA Optimistic Lock.
@@ -20,9 +21,8 @@ Stores the balances. Locked pessimistically during transactions.
 ### Table: `journal_transactions`
 The header for a business event (e.g., "Checkout #123").
 - `id` (UUID, PK)
-- `idempotency_key` (VARCHAR 64, UNIQUE): Redis-backed lock prevents duplicates.
-- `reference_type` (ENUM): CHECKOUT, REFUND, POINT_EARN.
-- `status` (ENUM): PENDING, COMPLETED, FAILED.
+- `idempotency_key` (VARCHAR 255, UNIQUE): Redis-backed lock prevents duplicates.
+- `reference_type` (ENUM): PAYMENT, REDEMPTION, REFUND, REWARD.
 
 ### Table: `ledger_entries`
 The immutable movements (Debits/Credits). 

@@ -316,6 +316,17 @@ class LedgerControllerTest {
     }
 
     @Test
+    @DisplayName("POST /redeem tanpa idempotency key harus 400")
+    void redeem_withoutIdempotencyKey_shouldReturn400() throws Exception {
+        mockMvc.perform(post("/api/v1/ledger/redeem")
+                        .param("ownerId", "cust-001")
+                        .param("voucherId", UUID.randomUUID().toString())
+                        .param("points", "1000"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"));
+    }
+
+    @Test
     @DisplayName("POST /checkout duplikat idempotency harus 409, bukan 500")
     void checkout_duplicateIdempotencyConstraint_shouldReturn409() throws Exception {
         CheckoutRequest request = CheckoutRequest.builder()
