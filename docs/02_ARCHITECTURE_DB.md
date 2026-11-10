@@ -15,6 +15,7 @@ Stores the balances. Locked pessimistically during transactions.
 - `account_type` (ENUM): ASSET, LIABILITY, REVENUE, EXPENSE.
 - `currency` (ENUM): IDR, A_POIN.
 - `balance` (DECIMAL 19,4)
+- `opening_balance` (DECIMAL 19,4): saldo awal baseline rekonsiliasi; saldo ekspektasi = `opening_balance + CREDIT − DEBIT`.
 - `status` (ENUM): ACTIVE, SUSPENDED, CLOSED.
 - `version` (BIGINT): JPA Optimistic Lock.
 
@@ -22,7 +23,7 @@ Stores the balances. Locked pessimistically during transactions.
 The header for a business event (e.g., "Checkout #123").
 - `id` (UUID, PK)
 - `idempotency_key` (VARCHAR 255, UNIQUE): Redis-backed lock prevents duplicates.
-- `reference_type` (ENUM): PAYMENT, REDEMPTION, REFUND, REWARD.
+- `reference_type` (ENUM): PAYMENT, REDEMPTION, REFUND, REWARD, SETTLEMENT.
 
 ### Table: `ledger_entries`
 The immutable movements (Debits/Credits). 
@@ -53,3 +54,30 @@ so concurrent redeems cannot oversell; `(voucher_id, owner_id)` is unique so a
 user can redeem the same voucher only once.
 - `vouchers`: `code`, `points_cost`, `total_quota`, `remaining_quota`, period, status.
 - `voucher_redemptions`: link to voucher, owner, ledger `transaction_id`, points spent.
+
+### Tables: `merchant_settlements` & `settlement_items` (Fase I)
+Batch settlement pendapatan merchant; nilai batch adalah **snapshot** dan tidak
+berubah setelah dibuat.
+- `merchant_settlements`: `merchant_id`, `currency`, periode `[period_start, period_end)`,
+  `gross_amount`, `refund_amount`, `fee_percent`, `fee_amount`, `net_amount`,
+  status `PENDING|PAID|CANCELLED`, `payout_transaction_id` (jurnal `SETTLEMENT`),
+  `idempotency_key` (UNIQUE).
+- `settlement_items`: satu baris per jurnal kontribusi (`transaction_id`, `reference_type`,
+  `entry_type`, `amount`, `signed_amount`, `occurred_at`), UNIQUE `(settlement_id, transaction_id)`.
+
+Rumus: `gross` = total CREDIT merchant dari jurnal `PAYMENT` dalam periode;
+`refund` = total DEBIT merchant dari jurnal `REFUND` (reversal `PAYMENT`);
+`fee = (gross − refund) × fee_percent / 100` (skala 4, HALF_UP);
+`net = gross − refund − fee`. Payout memposting jurnal `SETTLEMENT`
+(DEBIT akun merchant, CREDIT akun clearing `system-settlement`).
+
+### Tables: `reconciliation_runs` & `reconciliation_discrepancies` (Fase I)
+Audit trail rekonsiliasi saldo terhadap ledger.
+- `reconciliation_runs`: `status` (`BALANCED|DISCREPANCY`), `accounts_checked`,
+  `discrepancy_count`, `unbalanced_journal_count`, `total_abs_variance`,
+  `triggered_by`, `started_at`, `completed_at`.
+- `reconciliation_discrepancies`: `run_id`, `account_id` (nullable), `discrepancy_type`
+  (`BALANCE_MISMATCH|UNBALANCED_JOURNAL`), `expected_balance`, `actual_balance`, `variance`, `detail`.
+
+Saldo ekspektasi = `opening_balance + ΣCREDIT − ΣDEBIT`. Selisih dilaporkan sebagai temuan,
+bukan diperbaiki otomatis, agar jejak audit tetap utuh.

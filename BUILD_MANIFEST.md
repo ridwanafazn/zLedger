@@ -255,12 +255,13 @@ Rujukan utama:
 | Prioritas | Endpoint | Status |
 |-----------|----------|--------|
 | P0 | `POST /checkout`, `POST /redeem`, `GET /accounts/{id}/mutations` | ✅ Implemented |
-| P0 | Account CRUD + `/balance` + `PATCH /status` | ⏳ Planned |
-| P0 | `GET /transactions`, `GET /transactions/{id}` | ⏳ Planned |
-| P1 | `POST /transactions/{id}/reverse` | ⏳ Planned |
-| P1 | Voucher CRUD | ⏳ Planned |
+| P0 | Account CRUD + `/balance` + `PATCH /status` | ✅ Implemented |
+| P0 | `GET /transactions`, `GET /transactions/{id}` | ✅ Implemented |
+| P1 | `POST /transactions/{id}/reverse` | ✅ Implemented |
+| P1 | Voucher CRUD | ✅ Implemented |
 | P1 | Blob upload (`/upload/*`, `/files/*`) | ⏳ Planned |
-| P2 | Rewards, Settlement, Reconciliation | ⏳ Planned |
+| P2 | Rewards | ⏳ Planned |
+| P2 | Settlement & Reconciliation | ✅ Implemented (`/api/v1/settlements`, `/api/v1/reconciliation/runs`) |
 | P3 | Idempotency admin | ⏳ Planned |
 
 ### Roadmap Hardening & Cloud (belum dikoding)

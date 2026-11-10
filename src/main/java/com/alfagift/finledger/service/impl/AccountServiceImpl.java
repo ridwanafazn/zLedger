@@ -60,6 +60,8 @@ public class AccountServiceImpl implements AccountService {
                 .accountType(request.getAccountType())
                 .currency(request.getCurrency())
                 .balance(request.getInitialBalance() != null ? request.getInitialBalance() : java.math.BigDecimal.ZERO)
+                // Saldo awal dijadikan baseline rekonsiliasi (opening + mutasi ledger = saldo)
+                .openingBalance(request.getInitialBalance() != null ? request.getInitialBalance() : java.math.BigDecimal.ZERO)
                 .status(com.alfagift.finledger.domain.enums.AccountStatus.ACTIVE)
                 .build();
 
@@ -192,6 +194,7 @@ public class AccountServiceImpl implements AccountService {
                 .accountType(account.getAccountType())
                 .currency(account.getCurrency())
                 .balance(account.getBalance())
+                .openingBalance(account.getOpeningBalance())
                 .status(account.getStatus())
                 .version(account.getVersion())
                 .createdAt(account.getCreatedAt())

@@ -59,6 +59,7 @@ public class AccountRepositoryCustomImpl implements AccountRepositoryCustom {
         account.setAccountType(fresh.getAccountType());
         account.setCurrency(fresh.getCurrency());
         account.setBalance(fresh.getBalance());
+        account.setOpeningBalance(fresh.getOpeningBalance());
         account.setStatus(fresh.getStatus());
         account.setVersion(fresh.getVersion());
         account.setCreatedAt(fresh.getCreatedAt());

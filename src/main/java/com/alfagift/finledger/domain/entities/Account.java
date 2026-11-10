@@ -62,6 +62,18 @@ public class Account {
     @Builder.Default
     private BigDecimal balance = BigDecimal.ZERO;
 
+    /**
+     * Saldo awal akun sebagai baseline rekonsiliasi.
+     * <p>
+     * Saldo ekspektasi dihitung ulang dari ledger:
+     * {@code openingBalance + total CREDIT - total DEBIT}. Untuk akun yang
+     * dibuat dengan saldo awal (seed/admin), nilai ini diisi sama dengan saldo
+     * awal tersebut sehingga rekonsiliasi tidak melaporkan selisih palsu.
+     */
+    @Column(name = "opening_balance", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
+    private BigDecimal openingBalance = BigDecimal.ZERO;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false)

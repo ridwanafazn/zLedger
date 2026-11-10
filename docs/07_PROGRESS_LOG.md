@@ -26,7 +26,7 @@
 | F | CI green + quality gate (JaCoCo, ArchUnit) | ✅ | `72a3251` + perbaikan `api.version` |
 | G | Domain voucher & flash sale nyata | ✅ | commit Fase G |
 | H | User DB + registrasi + revokasi token | ✅ | `231c7a8`…`311514b` |
-| I | Settlement & reconciliation | ⏳ | — |
+| I | Settlement & reconciliation | ✅ | commit Fase I |
 | J | Blob storage / bukti bayar | ⏳ | — |
 | K | Observability (Prometheus/Grafana) | ⏳ | — |
 | L | Deploy cloud | ⏸️ ditunda | — |
@@ -45,6 +45,10 @@
 | Registrasi publik | Role dikunci `CUSTOMER`; MERCHANT/ADMIN hanya lewat admin | Mencegah privilege escalation |
 | Error | RFC 7807 `application/problem+json` | Kontrak FE konsisten |
 | Reversal | Jurnal `REFUND` kompensasi, bukan UPDATE/DELETE | Immutability audit trail |
+| Settlement | Snapshot `PENDING` → payout jurnal `SETTLEMENT` (DEBIT merchant, CREDIT clearing) | Payout = perpindahan dana nyata, dapat diaudit sebagai jurnal biasa |
+| Anti-overlap settlement | `pg_advisory_xact_lock(hashtext(merchant:currency))` + cek rentang `[start, end)` | Dua admin paralel tidak bisa membuat periode bertumpuk; batch CANCELLED membebaskan periode |
+| Fee settlement | `(gross − refund) × fee%`, skala 4 `HALF_UP`, default 1% (`app.settlement.fee-percent`) | Pembulatan deterministik & dapat dikonfigurasi |
+| Rekonsiliasi | `opening_balance` + `ΣCREDIT − ΣDEBIT`, hasil disimpan sebagai run + temuan | Saldo awal seed tidak lagi menghasilkan selisih palsu; audit trail permanen |
 | Test | Surefire unit, Failsafe integration | `mvn test` tetap jalan tanpa Docker |
 
 ## Lingkungan Lokal
@@ -58,13 +62,16 @@
 
 ## Known Issues / Utang Teknis
 
-1. Settlement/reconciliation belum ada → Fase I.
-2. Upload bukti bayar belum ada → Fase J.
-3. `GET /accounts/{id}/mutations` tidak memvalidasi akun ada/tidak (mengembalikan halaman kosong).
-4. Idempotency `redeem` (legacy) hanya efektif bila klien mengirim header.
-5. SpotBugs report-only (belum fail build).
-6. Belum ada endpoint ganti password/reset password (registrasi & admin create sudah ada).
-7. JWT tidak membawa `jti`; revokasi berbasis username (cukup untuk skala portofolio).
+1. Upload bukti bayar belum ada → Fase J.
+2. `GET /accounts/{id}/mutations` tidak memvalidasi akun ada/tidak (mengembalikan halaman kosong).
+3. Idempotency `redeem` (legacy) hanya efektif bila klien mengirim header.
+4. SpotBugs report-only (belum fail build).
+5. Belum ada endpoint ganti password/reset password (registrasi & admin create sudah ada).
+6. JWT tidak membawa `jti`; revokasi berbasis username (cukup untuk skala portofolio).
+7. Settlement membaca seluruh item jurnal satu periode dalam satu query (belum paginated);
+   untuk merchant volume besar sebaiknya ditambah preview berbasis agregasi SQL.
+8. Payout belum memakai jurnal reversal untuk "batalkan payout" (hanya reversal manual admin
+   lewat `POST /ledger/transactions/{id}/reverse`).
 
 ## Riwayat Perubahan
 
@@ -77,6 +84,7 @@
 | 2026-11-10 | Fase H: user DB (V6 `app_users`/`app_user_roles`), registrasi publik, CRUD user admin, revokasi token seketika, 135 unit + 8 integration hijau, coverage 86.5% |
 | 2026-11-10 | Fix config: `springdoc:`/`management:` yang termakan komentar di `application.yml`; hapus `spring.profiles.active` ilegal dari `application-prod.yml` (profil prod sudah diuji start & health UP) |
 | 2026-11-10 | Hardening: `logout` dapat dipanggil tanpa access token (cukup refresh token); 135 unit + 9 integration hijau |
+| 2026-11-10 | Fase I: settlement merchant (V8 `merchant_settlements`/`settlement_items`) + rekonsiliasi audit (V7 `opening_balance`, `reference_type.SETTLEMENT`), endpoint ADMIN, 165 unit + 12 integration hijau, smoke HTTP 15/15 lulus |
 
 ## Catatan CI
 

@@ -28,9 +28,10 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] Fase G: domain voucher (katalog, kuota atomik, anti-overselling, unique redeem).
 - [x] Fase H: user DB (`app_users` + role), registrasi publik, manajemen user admin,
       revokasi access/refresh token saat user dinonaktifkan.
+- [x] Fase I: settlement merchant (batch gross/refund/fee/net, payout jurnal `SETTLEMENT`,
+      periode anti-overlap) + rekonsiliasi saldo vs ledger dengan audit trail.
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Fase I: Settlement & reconciliation.
 - [ ] Fase J: Blob storage / bukti bayar.
 - [ ] Fase K: Observability (Prometheus/Grafana).
 - [ ] Fase L: Cloud deployment.

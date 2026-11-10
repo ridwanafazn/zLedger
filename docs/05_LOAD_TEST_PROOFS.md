@@ -113,6 +113,32 @@ pengecekan + pengurangan kuota, sehingga tidak terjadi overselling meski
 50 request tiba bersamaan. Skenario juga diuji otomatis di
 `VoucherConcurrencyIntegrationTest` (kuota 5, 20 user paralel).
 
+## Skenario 6 — Settlement Merchant & Rekonsiliasi (Fase I)
+
+**Setup:** harness `loadtest/settlement-smoke.ps1` pada aplikasi lokal:
+checkout 40.000 IDR ke merchant baru, preview settlement (fee 1%),
+buat batch, replay idempotent, payout, lalu rekonsiliasi.
+
+**Hasil aktual:**
+
+| Langkah | Hasil |
+|---|---|
+| Preview: gross / fee / net | **40.000 / 400 / 39.600** |
+| Create batch | `201` status `PENDING` |
+| Replay `X-Idempotency-Key` sama | id batch identik (bukan duplikat) |
+| Create batch periode bertumpuk (key lain) | `409 Conflict` |
+| Payout | `200` status `PAID`, `payoutTransactionId` terisi |
+| Payout ganda | `409 Conflict` |
+| Saldo merchant setelah payout | **400.0000** (= fee), tepat |
+| Rekonsiliasi | `BALANCED`, `discrepancyCount = 0` |
+| Rekonsiliasi setelah data smoke dibersihkan | `BALANCED`, `discrepancyCount = 0` |
+
+**Kesimpulan:** payout settlement menghasilkan jurnal `SETTLEMENT` yang seimbang
+(DEBIT merchant = CREDIT clearing) dan tidak mengubah saldo total sistem.
+Rekonsiliasi memvalidasi `balance = opening_balance + ΣCREDIT − ΣDEBIT` untuk
+seluruh akun sehingga drift sekecil apa pun akan terdeteksi. Uji otomatis setara:
+`SettlementIntegrationTest` (3 skenario) dan `ReconciliationServiceImplTest`.
+
 ## Limitasi
 
 - Pengujian dijalankan pada satu mesin lokal (bukan cluster), sehingga angka
@@ -120,12 +146,16 @@ pengecekan + pengurangan kuota, sehingga tidak terjadi overselling meski
 - Voucher sudah dimodelkan; skenario 5 menguji kuota nyata.
 - Skenario 1.000 VU seperti rencana awal memerlukan k6 dan lingkungan terpisah
   (lihat `loadtest/k6/` untuk skrip yang siap dijalankan di CI/load generator).
+- Settlement belum diuji dengan volume transaksi besar (rincian item dibaca
+  dalam satu query per batch; perlu pagination bila periode sangat panjang).
 
 ## Cara Menjalankan Ulang
 
 ```powershell
 # aplikasi + docker compose harus aktif
 powershell -ExecutionPolicy Bypass -File loadtest/local-loadtest.ps1 -Parallel 50
+powershell -ExecutionPolicy Bypass -File loadtest/voucher-loadtest.ps1 -Users 50 -Quota 10
+powershell -ExecutionPolicy Bypass -File loadtest/settlement-smoke.ps1
 
 # dengan k6 (jika tersedia)
 k6 run -e VUS=50 -e ITERATIONS=200 loadtest/k6/flash-sale.js

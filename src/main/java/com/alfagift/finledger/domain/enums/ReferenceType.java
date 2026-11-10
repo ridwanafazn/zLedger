@@ -7,5 +7,6 @@ public enum ReferenceType {
     PAYMENT,     // Pembayaran multi-tender
     REDEMPTION,  // Tebasan flash sale / voucher
     REFUND,      // Pengembalian wang / poin
-    REWARD       // Hadiah poin loyalty (asinkron via Kafka)
+    REWARD,      // Hadiah poin loyalty (asinkron via Kafka)
+    SETTLEMENT   // Payout batch settlement merchant ke akun clearing sistem
 }

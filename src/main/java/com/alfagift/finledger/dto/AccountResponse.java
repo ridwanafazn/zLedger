@@ -26,6 +26,7 @@ public class AccountResponse {
     private AccountType accountType;
     private Currency currency;
     private BigDecimal balance;
+    private BigDecimal openingBalance;
     private AccountStatus status;
     private Long version;
     private LocalDateTime createdAt;

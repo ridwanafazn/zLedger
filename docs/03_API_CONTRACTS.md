@@ -19,6 +19,11 @@ All endpoints are prefixed with `/api/v1`.
 - `POST /users`, `GET /users`, `GET /users/{id}`, `PATCH /users/{id}/status` (ADMIN).
   Registrasi publik selalu membuat role CUSTOMER; role lain hanya lewat endpoint admin.
   Menonaktifkan user mencabut refresh token dan access token aktifnya.
+- Settlement (ADMIN): `GET /settlements/preview`, `POST /settlements`,
+  `GET /settlements`, `GET /settlements/{id}`, `POST /settlements/{id}/pay`,
+  `POST /settlements/{id}/cancel`.
+- Rekonsiliasi (ADMIN): `POST /reconciliation/runs`, `GET /reconciliation/runs`,
+  `GET /reconciliation/runs/{id}`.
 - CORS: origin frontend diatur via `app.cors.allowed-origins`.
 
 ## 1b. Aturan Idempotency per Endpoint

@@ -2,6 +2,7 @@ package com.alfagift.finledger.infrastructure.exception;
 
 import com.alfagift.finledger.infrastructure.IdempotencyRejectedException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
+import com.alfagift.finledger.infrastructure.SettlementConflictException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -62,6 +63,13 @@ public class GlobalExceptionHandler {
             IdempotencyRejectedException ex, WebRequest request) {
         return build(HttpStatus.CONFLICT, "Idempotency Conflict",
                 ApiErrorCodes.IDEMPOTENCY_REJECTED, ex.getReason(), null, request);
+    }
+
+    @ExceptionHandler(SettlementConflictException.class)
+    public ResponseEntity<ProblemDetailResponse> handleSettlementConflict(
+            SettlementConflictException ex, WebRequest request) {
+        return build(HttpStatus.CONFLICT, "Settlement Conflict",
+                ApiErrorCodes.CONFLICT, ex.getMessage(), null, request);
     }
 
     @ExceptionHandler(EntityNotFoundException.class)

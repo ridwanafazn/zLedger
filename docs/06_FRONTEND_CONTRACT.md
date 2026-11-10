@@ -38,6 +38,8 @@ Aturan untuk frontend:
 | Ajukan refund (admin) | `POST /transactions/{id}/reverse` |
 | Manajemen akun (admin) | `POST /accounts`, `PATCH /accounts/{id}/status` |
 | Manajemen user (admin) | `POST /users`, `GET /users`, `PATCH /users/{id}/status` |
+| Settlement merchant (admin) | `GET /settlements/preview`, `POST /settlements`, `POST /settlements/{id}/pay` |
+| Rekonsiliasi (admin) | `POST /reconciliation/runs`, `GET /reconciliation/runs/{id}` |
 
 ## 3. Bentuk Response
 
@@ -79,10 +81,10 @@ Origin yang diizinkan diatur dengan `CORS_ALLOWED_ORIGINS`
 | Registrasi user mandiri | ✅ (`POST /api/v1/auth/register`, role CUSTOMER) |
 | Manajemen user oleh admin | ✅ (`/api/v1/users`, nonaktif = token dicabut) |
 | Katalog voucher & redeem | ✅ (`/api/v1/vouchers`) |
+| Laporan settlement merchant | ✅ (`/api/v1/settlements`, preview + batch + payout) |
+| Rekonsiliasi saldo vs ledger (admin) | ✅ (`/api/v1/reconciliation/runs`, hasil tersimpan sebagai audit) |
 | Notifikasi/websocket status pembayaran | ❌ belum |
 | Endpoint upload bukti bayar | ❌ belum (rencana S3/MinIO) |
-| Laporan settlement merchant | ❌ belum |
-| Rekonsiliasi saldo vs ledger (admin) | ⚠️ tersedia lewat SQL, belum endpoint |
 
 ## 6. Checklist Integrasi FE
 

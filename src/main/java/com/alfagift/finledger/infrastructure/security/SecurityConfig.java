@@ -22,6 +22,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <ul>
  *   <li>Publik: login, register, refresh, logout, Swagger/OpenAPI, health/info</li>
  *   <li>{@code /api/v1/users/**}: ADMIN</li>
+ *   <li>{@code /api/v1/settlements/**} dan {@code /api/v1/reconciliation/**}: ADMIN</li>
  *   <li>{@code PATCH /accounts/*&#47;status} dan {@code POST /accounts}: ADMIN</li>
  *   <li>{@code POST /checkout} dan {@code POST /redeem}: CUSTOMER/MERCHANT/ADMIN</li>
  *   <li>Endpoint lain: wajib terautentikasi</li>
@@ -45,6 +46,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
                                 "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/settlements", "/api/v1/settlements/**",
+                                "/api/v1/reconciliation", "/api/v1/reconciliation/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/ledger/accounts").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/ledger/accounts/*/status").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/ledger/transactions/*/reverse").hasRole("ADMIN")

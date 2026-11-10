@@ -22,6 +22,7 @@ FinLedger Engine adalah backend ledger **double-entry** yang dirancang untuk mem
 2. **Flash Sale Redemption** — Tebasan voucher terbatas dengan A_Poin di bawah tekanan concurrency tinggi.
 3. **Earn Points (Asynchronous)** — A_Poin diberikan selepas transaksi melalui Apache Kafka tanpa memblokir aliran checkout utama.
 4. **Ledger Audit** — Sejarah imutabiliti semua pergerakan balans/poin (tidak ada DELETE/UPDATE pada entri ledger).
+5. **Merchant Settlement & Reconciliation** — Batch pendapatan merchant (gross − refund − fee), payout sebagai jurnal `SETTLEMENT`, plus rekonsiliasi saldo akun terhadap ledger.
 
 Projek ini dibangun sebagai **Modular Monolith** dengan **Clean Architecture**, mematuhi semua prinsip **SOLID**, dan siap untuk dokumentasi API produksi melalui **Springdoc OpenAPI 3 (Swagger UI)**.
 
@@ -202,6 +203,15 @@ Mekanisme keamanan tambahan:
 | `GET` | `/api/v1/vouchers/{voucherId}` | Detail voucher | ✅ |
 | `PATCH` | `/api/v1/vouchers/{voucherId}/status` | Aktifkan/nonaktifkan voucher (ADMIN) | ✅ |
 | `POST` | `/api/v1/vouchers/{voucherId}/redeem` | Redeem voucher kuota terbatas | ✅ |
+| `GET` | `/api/v1/settlements/preview` | Simulasi settlement merchant (gross/refund/fee/net, ADMIN) | ✅ |
+| `POST` | `/api/v1/settlements` | Buat batch settlement PENDING (ADMIN) | ✅ |
+| `GET` | `/api/v1/settlements` | Daftar batch settlement (filter merchant/status, ADMIN) | ✅ |
+| `GET` | `/api/v1/settlements/{settlementId}` | Detail batch + rincian jurnal (ADMIN) | ✅ |
+| `POST` | `/api/v1/settlements/{settlementId}/pay` | Payout via jurnal `SETTLEMENT` (ADMIN) | ✅ |
+| `POST` | `/api/v1/settlements/{settlementId}/cancel` | Batalkan batch PENDING (ADMIN) | ✅ |
+| `POST` | `/api/v1/reconciliation/runs` | Jalankan rekonsiliasi saldo vs ledger (ADMIN) | ✅ |
+| `GET` | `/api/v1/reconciliation/runs` | Riwayat rekonsiliasi (ADMIN) | ✅ |
+| `GET` | `/api/v1/reconciliation/runs/{runId}` | Detail run + temuan (ADMIN) | ✅ |
 
 **Kontrak lintas-endpoint:**
 - `POST`/`PATCH` wajib `X-Idempotency-Key`. Retry identik mengembalikan respons sukses yang sama (cached), payload berbeda → `409`.
@@ -210,6 +220,7 @@ Mekanisme keamanan tambahan:
 - Metrik checkout tersedia di `/actuator/metrics/ledger.checkout`.
 - CORS diaktifkan untuk `http://localhost:3000` dan `http://localhost:5173` (atur via `CORS_ALLOWED_ORIGINS`).
 - Reversal tidak mengubah transaksi asal; dibuat jurnal `REFUND` dengan entri kompensasi (`debit ↔ credit`).
+- Settlement: `net = gross − refund − fee`, periode `[start, end)`, payout = jurnal `SETTLEMENT` (DEBIT merchant, CREDIT akun clearing sistem). Periode bertumpuk dan payout ganda → `409`.
 
 ---
 

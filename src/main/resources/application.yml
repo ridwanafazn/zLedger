@@ -96,6 +96,11 @@ app:
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:2000}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:5}
+  settlement:
+    # Fee merchant default per batch settlement (persen). Bisa dioverride per request.
+    fee-percent: ${SETTLEMENT_FEE_PERCENT:1.0}
+    # Owner akun sistem yang menerima payout settlement merchant (dibuat otomatis bila belum ada)
+    clearing-owner-id: ${SETTLEMENT_CLEARING_OWNER_ID:system-settlement}
   security:
     jwt:
       # WAJIB diganti di produksi (minimal 32 byte)
