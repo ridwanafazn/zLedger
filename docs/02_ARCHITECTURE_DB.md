@@ -81,3 +81,30 @@ Audit trail rekonsiliasi saldo terhadap ledger.
 
 Saldo ekspektasi = `opening_balance + ΣCREDIT − ΣDEBIT`. Selisih dilaporkan sebagai temuan,
 bukan diperbaiki otomatis, agar jejak audit tetap utuh.
+
+### Table: `payment_proofs` (Fase J)
+Metadata bukti bayar; byte file berada di object storage (MinIO/S3/local), bukan di PostgreSQL.
+- `transaction_id` (FK `journal_transactions`), `uploader_id`
+- `object_key` (UNIQUE), `original_filename`, `content_type`, `size_bytes`
+- `checksum_sha256` (UNIQUE per transaksi) — mencegah unggahan file yang sama dua kali
+- `created_at`
+
+Alur: validasi tipe + magic bytes → hitung SHA-256 → simpan blob → simpan metadata.
+Bila metadata gagal (mis. duplikat), blob dihapus kembali. Detail keputusan:
+[`BLOB_STORAGE_DECISION.md`](BLOB_STORAGE_DECISION.md).
+
+## 3. Observability (Fase K)
+
+- **Metrik:** Micrometer → `/actuator/prometheus` (registry Prometheus).
+  - HTTP: `http_server_requests_seconds{...}` (histogram, p50/p95/p99).
+  - Domain: `finledger.checkout` (timer), `finledger.settlement.created|paid|cancelled|rejected`,
+    `finledger.settlement.payout.amount`, `finledger.reconciliation.runs|discrepancies|duration`,
+    `finledger.payment_proof.uploaded|rejected|size.bytes`.
+  - Runtime: JVM, HikariCP, Tomcat.
+  - Tag global `application=finledger-engine`.
+- **Scrape:** Prometheus (`observability/prometheus.yml`, port 9090) menarik
+  `host.docker.internal:8080/actuator/prometheus` setiap 15 detik.
+- **Visualisasi:** Grafana (port 3000) dengan datasource & dashboard yang di-provision otomatis
+  (`observability/grafana/`).
+- `/actuator/prometheus` dibuka untuk scrape; di produksi batasi lewat network policy
+  atau `management.server.port` terpisah.

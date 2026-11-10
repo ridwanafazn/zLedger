@@ -17,6 +17,8 @@ import com.alfagift.finledger.dto.SettlementResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.SettlementConflictException;
 import com.alfagift.finledger.infrastructure.config.SettlementProperties;
+import com.alfagift.finledger.infrastructure.metrics.FinLedgerMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
@@ -90,7 +92,8 @@ class SettlementServiceImplTest {
         SettlementProperties properties =
                 new SettlementProperties(new BigDecimal("1.0"), CLEARING_ID);
         settlementService = new SettlementServiceImpl(settlementRepository, settlementItemRepository,
-                accountRepository, ledgerEntryRepository, journalTransactionRepository, properties);
+                accountRepository, ledgerEntryRepository, journalTransactionRepository, properties,
+                new FinLedgerMetrics(new SimpleMeterRegistry()));
         ReflectionTestUtils.setField(settlementService, "entityManager", entityManager);
     }
 

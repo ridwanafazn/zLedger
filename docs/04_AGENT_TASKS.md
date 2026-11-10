@@ -30,8 +30,10 @@ You are a Principal Java Engineer. Read the current environment state carefully 
       revokasi access/refresh token saat user dinonaktifkan.
 - [x] Fase I: settlement merchant (batch gross/refund/fee/net, payout jurnal `SETTLEMENT`,
       periode anti-overlap) + rekonsiliasi saldo vs ledger dengan audit trail.
+- [x] Fase J: bukti bayar — port `BlobStorage` (local/S3), metadata + checksum SHA-256,
+      validasi magic bytes, streaming unduh, presigned URL untuk S3.
+- [x] Fase K: observability — Micrometer Prometheus (`/actuator/prometheus`), metrik bisnis,
+      Prometheus + Grafana auto-provisioned (`observability/`).
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Fase J: Blob storage / bukti bayar.
-- [ ] Fase K: Observability (Prometheus/Grafana).
 - [ ] Fase L: Cloud deployment.

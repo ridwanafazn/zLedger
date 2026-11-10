@@ -1,0 +1,21 @@
+# Prometheus scrape config untuk FinLedger Engine (Fase K).
+# Aplikasi berjalan di host (mvn spring-boot:run), Prometheus di container,
+# sehingga target memakai host.docker.internal.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+
+scrape_configs:
+  - job_name: finledger-engine
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          application: finledger-engine
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

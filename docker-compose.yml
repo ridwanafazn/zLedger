@@ -78,12 +78,70 @@ services:
     networks:
       - finledger-net
 
+  # --------------------------------------------------------------------------
+  # S3-compatible object storage untuk bukti bayar (Fase J)
+  # S3Mock dipakai karena image minio/minio tidak tersedia di environment ini.
+  # Untuk MinIO, ganti image dengan `minio/minio` + command `server /data`
+  # dan set STORAGE_ENDPOINT=http://localhost:9000 — API-nya sama (S3).
+  # --------------------------------------------------------------------------
+  s3mock:
+    image: adobe/s3mock:3.5.2
+    container_name: finledger-s3mock
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${STORAGE_BUCKET:-finledger-proofs}
+    ports:
+      - "9091:9090"
+    networks:
+      - finledger-net
+
+  # --------------------------------------------------------------------------
+  # Prometheus - scraping /actuator/prometheus (Fase K)
+  # --------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: finledger-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - finledger-net
+
+  # --------------------------------------------------------------------------
+  # Grafana - dashboard FinLedger (datasource & dashboard auto-provisioned)
+  # http://localhost:3000 (admin / admin)
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: finledger-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - finledger_grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - finledger-net
+
 # --------------------------------------------------------------------------
 # Named volumes
 # --------------------------------------------------------------------------
 volumes:
   finledger_postgres_data:
   finledger_redis_data:
+  finledger_grafana_data:
 
 # --------------------------------------------------------------------------
 # Network

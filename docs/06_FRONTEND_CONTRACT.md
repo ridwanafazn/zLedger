@@ -40,6 +40,7 @@ Aturan untuk frontend:
 | Manajemen user (admin) | `POST /users`, `GET /users`, `PATCH /users/{id}/status` |
 | Settlement merchant (admin) | `GET /settlements/preview`, `POST /settlements`, `POST /settlements/{id}/pay` |
 | Rekonsiliasi (admin) | `POST /reconciliation/runs`, `GET /reconciliation/runs/{id}` |
+| Bukti bayar | `POST /payment-proofs` (multipart), `GET /payment-proofs/{id}/content` |
 
 ## 3. Bentuk Response
 
@@ -83,8 +84,9 @@ Origin yang diizinkan diatur dengan `CORS_ALLOWED_ORIGINS`
 | Katalog voucher & redeem | ✅ (`/api/v1/vouchers`) |
 | Laporan settlement merchant | ✅ (`/api/v1/settlements`, preview + batch + payout) |
 | Rekonsiliasi saldo vs ledger (admin) | ✅ (`/api/v1/reconciliation/runs`, hasil tersimpan sebagai audit) |
+| Upload bukti bayar | ✅ (`POST /api/v1/payment-proofs`, multipart + checksum SHA-256) |
+| Unduh bukti bayar | ✅ (`GET /api/v1/payment-proofs/{id}/content`, atau `presignedUrl` bila S3) |
 | Notifikasi/websocket status pembayaran | ❌ belum |
-| Endpoint upload bukti bayar | ❌ belum (rencana S3/MinIO) |
 
 ## 6. Checklist Integrasi FE
 

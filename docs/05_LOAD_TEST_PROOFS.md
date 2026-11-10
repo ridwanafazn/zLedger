@@ -149,6 +149,32 @@ seluruh akun sehingga drift sekecil apa pun akan terdeteksi. Uji otomatis setara
 - Settlement belum diuji dengan volume transaksi besar (rincian item dibaca
   dalam satu query per batch; perlu pagination bila periode sangat panjang).
 
+## Skenario 7 — Bukti Bayar & Observability (Fase J + K)
+
+**Setup:** harness `loadtest/proof-and-observability-smoke.ps1` pada stack lokal
+(aplikasi + S3Mock + Prometheus + Grafana).
+
+**Hasil aktual:**
+
+| Langkah | Hasil |
+|---|---|
+| Upload PNG valid | `201`, checksum SHA-256 64 hex, 70 byte |
+| Unduh ulang & bandingkan hash | identik |
+| Upload file yang sama lagi | `400` (duplikat checksum) |
+| Upload `*.png` berisi teks | `400` (magic bytes tidak cocok) |
+| User lain mengunduh bukti | `403` |
+| Customer menghapus bukti | `403`; ADMIN → `204` |
+| `/actuator/prometheus` | memuat `finledger_payment_proof_uploaded_total`, `http_server_requests_seconds_count` |
+| Prometheus scrape | target `finledger-engine` **UP**, `sum(finledger_payment_proof_uploaded_total) = 2` |
+| Grafana | datasource `Prometheus` + dashboard `FinLedger` ter-provision |
+| **Storage S3 (instance terpisah, `STORAGE_TYPE=s3`)** | upload `201` ke bucket `finledger-proofs`, `presignedUrl` SigV4 terisi |
+| GET presigned langsung ke S3 | `200`, byte identik dengan sumber |
+| Unduh lewat API (server → S3) | `200`, hash identik |
+
+**Kesimpulan:** byte file benar-benar berada di object storage (bukan database),
+integritasnya dapat diverifikasi ulang kapan saja lewat checksum, dan seluruh
+layanan terpantau metrik yang siap di-scrape Prometheus.
+
 ## Cara Menjalankan Ulang
 
 ```powershell

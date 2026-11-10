@@ -26,9 +26,9 @@
 | F | CI green + quality gate (JaCoCo, ArchUnit) | ✅ | `72a3251` + perbaikan `api.version` |
 | G | Domain voucher & flash sale nyata | ✅ | commit Fase G |
 | H | User DB + registrasi + revokasi token | ✅ | `231c7a8`…`311514b` |
-| I | Settlement & reconciliation | ✅ | commit Fase I |
-| J | Blob storage / bukti bayar | ⏳ | — |
-| K | Observability (Prometheus/Grafana) | ⏳ | — |
+| I | Settlement & reconciliation | ✅ | `5d1f03b` |
+| J | Blob storage / bukti bayar | ✅ | commit Fase J+K |
+| K | Observability (Prometheus/Grafana) | ✅ | commit Fase J+K |
 | L | Deploy cloud | ⏸️ ditunda | — |
 
 ## Keputusan Teknis Penting
@@ -49,12 +49,15 @@
 | Anti-overlap settlement | `pg_advisory_xact_lock(hashtext(merchant:currency))` + cek rentang `[start, end)` | Dua admin paralel tidak bisa membuat periode bertumpuk; batch CANCELLED membebaskan periode |
 | Fee settlement | `(gross − refund) × fee%`, skala 4 `HALF_UP`, default 1% (`app.settlement.fee-percent`) | Pembulatan deterministik & dapat dikonfigurasi |
 | Rekonsiliasi | `opening_balance` + `ΣCREDIT − ΣDEBIT`, hasil disimpan sebagai run + temuan | Saldo awal seed tidak lagi menghasilkan selisih palsu; audit trail permanen |
+| Bukti bayar | Proxy upload multipart + validasi magic bytes + SHA-256, blob di object storage | File divalidasi sebelum disimpan; tidak ada objek yatim; port `BlobStorage` tetap siap untuk presigned upload |
+| Object storage | Port `BlobStorage`; default `local`, `s3` untuk MinIO/S3 (S3Mock di compose karena image MinIO tidak tersedia di env ini) | Kode produksi sama dengan demo; tanpa Docker tetap bisa diuji |
+| Metrik | Micrometer Prometheus + metrik bisnis berprefix `finledger.*` | Satu sumber kebenaran untuk alert & dashboard, tanpa agent tambahan |
 | Test | Surefire unit, Failsafe integration | `mvn test` tetap jalan tanpa Docker |
 
 ## Lingkungan Lokal
 
 - Java 21 (Temurin), Maven 3.10, Docker Desktop 29.
-- PostgreSQL 16, Redis 7, Kafka 3.8 (KRaft) via `docker-compose.yml`.
+- PostgreSQL 16, Redis 7, Kafka 3.8 (KRaft), S3Mock, Prometheus, Grafana via `docker-compose.yml`.
 - Testcontainers kini berjalan lokal **dan** di CI dengan system property
   `api.version=1.43` (Docker modern menolak API < 1.40).
 - k6 tidak tersedia; harness `loadtest/local-loadtest.ps1` dan
@@ -62,16 +65,19 @@
 
 ## Known Issues / Utang Teknis
 
-1. Upload bukti bayar belum ada → Fase J.
-2. `GET /accounts/{id}/mutations` tidak memvalidasi akun ada/tidak (mengembalikan halaman kosong).
-3. Idempotency `redeem` (legacy) hanya efektif bila klien mengirim header.
-4. SpotBugs report-only (belum fail build).
-5. Belum ada endpoint ganti password/reset password (registrasi & admin create sudah ada).
-6. JWT tidak membawa `jti`; revokasi berbasis username (cukup untuk skala portofolio).
-7. Settlement membaca seluruh item jurnal satu periode dalam satu query (belum paginated);
+1. `GET /accounts/{id}/mutations` tidak memvalidasi akun ada/tidak (mengembalikan halaman kosong).
+2. Idempotency `redeem` (legacy) hanya efektif bila klien mengirim header.
+3. SpotBugs report-only (belum fail build).
+4. Belum ada endpoint ganti password/reset password (registrasi & admin create sudah ada).
+5. JWT tidak membawa `jti`; revokasi berbasis username (cukup untuk skala portofolio).
+6. Settlement membaca seluruh item jurnal satu periode dalam satu query (belum paginated);
    untuk merchant volume besar sebaiknya ditambah preview berbasis agregasi SQL.
-8. Payout belum memakai jurnal reversal untuk "batalkan payout" (hanya reversal manual admin
+7. Payout belum memakai jurnal reversal untuk "batalkan payout" (hanya reversal manual admin
    lewat `POST /ledger/transactions/{id}/reverse`).
+8. Upload bukti bayar mem-buffer file di memori (maksimum 5 MB). Untuk file lebih besar,
+   gunakan presigned upload langsung ke S3.
+9. `/actuator/prometheus` terbuka tanpa autentikasi; di produksi batasi lewat network policy
+   atau port manajemen terpisah.
 
 ## Riwayat Perubahan
 
@@ -85,6 +91,8 @@
 | 2026-11-10 | Fix config: `springdoc:`/`management:` yang termakan komentar di `application.yml`; hapus `spring.profiles.active` ilegal dari `application-prod.yml` (profil prod sudah diuji start & health UP) |
 | 2026-11-10 | Hardening: `logout` dapat dipanggil tanpa access token (cukup refresh token); 135 unit + 9 integration hijau |
 | 2026-11-10 | Fase I: settlement merchant (V8 `merchant_settlements`/`settlement_items`) + rekonsiliasi audit (V7 `opening_balance`, `reference_type.SETTLEMENT`), endpoint ADMIN, 165 unit + 12 integration hijau, smoke HTTP 15/15 lulus |
+| 2026-11-10 | Fase J: bukti bayar (V9 `payment_proofs`), port `BlobStorage` (local/S3), validasi magic bytes + SHA-256, streaming unduh, presigned URL; smoke 21/21 lulus (termasuk jalur S3 nyata ke S3Mock) |
+| 2026-11-10 | Fase K: Micrometer Prometheus (`/actuator/prometheus`), 12 panel Grafana auto-provisioned, metrik bisnis settlement/rekonsiliasi/bukti bayar, Prometheus target UP |
 
 ## Catatan CI
 

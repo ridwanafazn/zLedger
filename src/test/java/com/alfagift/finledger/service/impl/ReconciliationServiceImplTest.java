@@ -10,6 +10,7 @@ import com.alfagift.finledger.domain.enums.EntryType;
 import com.alfagift.finledger.domain.enums.ReferenceType;
 import com.alfagift.finledger.domain.enums.ReconciliationStatus;
 import com.alfagift.finledger.dto.ReconciliationRunResponse;
+import com.alfagift.finledger.infrastructure.metrics.FinLedgerMetrics;
 import com.alfagift.finledger.repository.AccountBalanceCheck;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalBalanceCheck;
@@ -52,6 +53,8 @@ class ReconciliationServiceImplTest {
     private ReconciliationRunRepository reconciliationRunRepository;
     @Mock
     private ReconciliationDiscrepancyRepository reconciliationDiscrepancyRepository;
+    @Mock
+    private FinLedgerMetrics metrics;
 
     @InjectMocks
     private ReconciliationServiceImpl reconciliationService;

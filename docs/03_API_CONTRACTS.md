@@ -24,6 +24,10 @@ All endpoints are prefixed with `/api/v1`.
   `POST /settlements/{id}/cancel`.
 - Rekonsiliasi (ADMIN): `POST /reconciliation/runs`, `GET /reconciliation/runs`,
   `GET /reconciliation/runs/{id}`.
+- Bukti bayar: `POST /payment-proofs` (multipart, CUSTOMER/MERCHANT/ADMIN),
+  `GET /payment-proofs?transactionId=`, `GET /payment-proofs/{id}`,
+  `GET /payment-proofs/{id}/content` (streaming), `DELETE /payment-proofs/{id}` (ADMIN).
+- Observability: `GET /actuator/health`, `/actuator/metrics`, `/actuator/prometheus`.
 - CORS: origin frontend diatur via `app.cors.allowed-origins`.
 
 ## 1b. Aturan Idempotency per Endpoint

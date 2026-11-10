@@ -21,6 +21,7 @@ import com.alfagift.finledger.infrastructure.Idempotent;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.SettlementConflictException;
 import com.alfagift.finledger.infrastructure.config.SettlementProperties;
+import com.alfagift.finledger.infrastructure.metrics.FinLedgerMetrics;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalTransactionRepository;
 import com.alfagift.finledger.repository.LedgerEntryRepository;
@@ -80,6 +81,7 @@ public class SettlementServiceImpl implements SettlementService {
     private final LedgerEntryRepository ledgerEntryRepository;
     private final JournalTransactionRepository journalTransactionRepository;
     private final SettlementProperties settlementProperties;
+    private final FinLedgerMetrics metrics;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -133,6 +135,7 @@ public class SettlementServiceImpl implements SettlementService {
 
         if (settlementRepository.existsOverlappingPeriod(request.getMerchantId(), request.getCurrency(),
                 request.getPeriodStart(), request.getPeriodEnd(), SettlementStatus.CANCELLED)) {
+            metrics.settlementRejected("overlap");
             throw new SettlementConflictException(String.format(
                     "Periode %s s/d %s bertumpuk dengan batch settlement lain untuk merchant %s (%s)",
                     request.getPeriodStart(), request.getPeriodEnd(), request.getMerchantId(), request.getCurrency()));
@@ -142,6 +145,7 @@ public class SettlementServiceImpl implements SettlementService {
                 request.getPeriodStart(), request.getPeriodEnd(), effectiveFee);
 
         if (computation.net().signum() <= 0) {
+            metrics.settlementRejected("non_positive_net");
             throw new IllegalArgumentException(String.format(
                     "Net settlement harus positif (gross=%s, refund=%s, fee=%s, net=%s)",
                     computation.gross(), computation.refund(), computation.fee(), computation.net()));
@@ -167,6 +171,7 @@ public class SettlementServiceImpl implements SettlementService {
         }
 
         MerchantSettlement saved = settlementRepository.save(settlement);
+        metrics.settlementCreated(saved.getCurrency().name(), saved.getNetAmount());
         log.info("Settlement dibuat: id={}, merchant={}, periode={}..{}, net={}",
                 saved.getId(), saved.getMerchantId(), saved.getPeriodStart(), saved.getPeriodEnd(), saved.getNetAmount());
 
@@ -234,13 +239,16 @@ public class SettlementServiceImpl implements SettlementService {
                 .orElseThrow(() -> new EntityNotFoundException("Settlement tidak ditemukan: " + settlementId));
 
         if (settlement.getStatus() == SettlementStatus.PAID) {
+            metrics.settlementRejected("already_paid");
             throw new SettlementConflictException(
                     "Settlement " + settlementId + " sudah dibayar (payout " + settlement.getPayoutTransactionId() + ")");
         }
         if (settlement.getStatus() == SettlementStatus.CANCELLED) {
+            metrics.settlementRejected("cancelled");
             throw new SettlementConflictException("Settlement " + settlementId + " sudah dibatalkan");
         }
         if (settlement.getNetAmount().signum() <= 0) {
+            metrics.settlementRejected("non_positive_net");
             throw new SettlementConflictException(
                     "Settlement " + settlementId + " tidak punya net positif untuk dibayar");
         }
@@ -297,6 +305,7 @@ public class SettlementServiceImpl implements SettlementService {
         settlement.setPaidAt(LocalDateTime.now());
         MerchantSettlement saved = settlementRepository.save(settlement);
 
+        metrics.settlementPaid(saved.getCurrency().name(), net);
         log.info("Settlement {} dibayar: payout={}, net={}, merchant={}",
                 settlementId, payout.getId(), net, settlement.getMerchantId());
 
@@ -321,6 +330,7 @@ public class SettlementServiceImpl implements SettlementService {
         }
         MerchantSettlement saved = settlementRepository.save(settlement);
 
+        metrics.settlementCancelled(saved.getCurrency().name());
         log.info("Settlement {} dibatalkan: {}", settlementId, reason);
         return toResponse(saved, true);
     }

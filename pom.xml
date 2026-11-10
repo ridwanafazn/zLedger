@@ -33,6 +33,7 @@
         <testcontainers.version>1.21.3</testcontainers.version>
         <flyway.version>10.17.1</flyway.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <awssdk.version>2.28.16</awssdk.version>
     </properties>
 
     <dependencies>
@@ -118,6 +119,19 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- Micrometer Prometheus registry (/actuator/prometheus) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- S3-compatible object storage client (MinIO lokal, S3/GCS interop produksi) -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${awssdk.version}</version>
         </dependency>
 
         <!-- Flyway Database Migration -->

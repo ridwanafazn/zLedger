@@ -3,6 +3,8 @@ package com.alfagift.finledger.infrastructure.exception;
 import com.alfagift.finledger.infrastructure.IdempotencyRejectedException;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
 import com.alfagift.finledger.infrastructure.SettlementConflictException;
+import com.alfagift.finledger.infrastructure.storage.BlobNotFoundException;
+import com.alfagift.finledger.infrastructure.storage.BlobStorageException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -17,6 +19,8 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -104,6 +108,39 @@ public class GlobalExceptionHandler {
                 "Header wajib tidak ditemukan: " + ex.getHeaderName(), null, request);
     }
 
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ProblemDetailResponse> handleMissingPart(
+            MissingServletRequestPartException ex, WebRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Missing Required Part",
+                ApiErrorCodes.VALIDATION_ERROR,
+                "Bagian multipart wajib tidak ditemukan: " + ex.getRequestPartName(), null, request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ProblemDetailResponse> handleMaxUploadSize(
+            MaxUploadSizeExceededException ex, WebRequest request) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "Payload Too Large",
+                ApiErrorCodes.PAYLOAD_TOO_LARGE,
+                "Ukuran file melebihi batas yang diizinkan server", null, request);
+    }
+
+    @ExceptionHandler(BlobNotFoundException.class)
+    public ResponseEntity<ProblemDetailResponse> handleBlobNotFound(
+            BlobNotFoundException ex, WebRequest request) {
+        return build(HttpStatus.NOT_FOUND, "Blob Not Found",
+                ApiErrorCodes.NOT_FOUND,
+                "File bukti tidak ditemukan pada object storage", null, request);
+    }
+
+    @ExceptionHandler(BlobStorageException.class)
+    public ResponseEntity<ProblemDetailResponse> handleBlobStorage(
+            BlobStorageException ex, WebRequest request) {
+        log.error("Object storage gagal: {}", ex.getMessage(), ex.getCause());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, "Object Storage Unavailable",
+                ApiErrorCodes.SERVICE_UNAVAILABLE,
+                "Penyimpanan file sedang tidak tersedia, silakan coba lagi", null, request);
+    }
+
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ProblemDetailResponse> handleUnreadableBody(
             HttpMessageNotReadableException ex, WebRequest request) {
@@ -137,8 +174,7 @@ public class GlobalExceptionHandler {
                 ApiErrorCodes.VALIDATION_ERROR, "Satu atau lebih field tidak valid", errors, request);
     }
 
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<ProblemDetailResponse> handleResponseStatus(
+    @ExceptionHandler(ResponseStatusException.class)    public ResponseEntity<ProblemDetailResponse> handleResponseStatus(
             ResponseStatusException ex, WebRequest request) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         String errorCode = switch (status) {

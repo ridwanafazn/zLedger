@@ -20,9 +20,11 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * <p>
  * Matriks otorisasi:
  * <ul>
- *   <li>Publik: login, register, refresh, logout, Swagger/OpenAPI, health/info</li>
+ *   <li>Publik: login, register, refresh, logout, Swagger/OpenAPI, health/info,
+ *       dan {@code /actuator/prometheus} (scrape Prometheus; di produksi batasi lewat network policy)</li>
  *   <li>{@code /api/v1/users/**}: ADMIN</li>
  *   <li>{@code /api/v1/settlements/**} dan {@code /api/v1/reconciliation/**}: ADMIN</li>
+ *   <li>{@code POST /payment-proofs}: CUSTOMER/MERCHANT/ADMIN; {@code DELETE /payment-proofs/*}: ADMIN</li>
  *   <li>{@code PATCH /accounts/*&#47;status} dan {@code POST /accounts}: ADMIN</li>
  *   <li>{@code POST /checkout} dan {@code POST /redeem}: CUSTOMER/MERCHANT/ADMIN</li>
  *   <li>Endpoint lain: wajib terautentikasi</li>
@@ -44,7 +46,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/login", "/api/v1/auth/register",
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html",
-                                "/actuator/health", "/actuator/info").permitAll()
+                                "/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/settlements", "/api/v1/settlements/**",
                                 "/api/v1/reconciliation", "/api/v1/reconciliation/**").hasRole("ADMIN")
@@ -55,6 +57,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/vouchers/*/status").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/vouchers/*/redeem")
                         .hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payment-proofs")
+                        .hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/payment-proofs/*").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/ledger/checkout", "/api/v1/ledger/redeem")
                         .hasAnyRole("CUSTOMER", "MERCHANT", "ADMIN")
                         .anyRequest().authenticated())

@@ -8,6 +8,12 @@ spring:
   application:
     name: finledger-engine
 
+  # --- Multipart (unggah bukti bayar) ---
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:6MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:8MB}
+
   # --- Datasource (PostgreSQL) ---
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:finledger}
@@ -101,6 +107,20 @@ app:
     fee-percent: ${SETTLEMENT_FEE_PERCENT:1.0}
     # Owner akun sistem yang menerima payout settlement merchant (dibuat otomatis bila belum ada)
     clearing-owner-id: ${SETTLEMENT_CLEARING_OWNER_ID:system-settlement}
+  # --- Object storage bukti bayar (Fase J) ---
+  storage:
+    # local (filesystem) atau s3 (MinIO/S3-compatible)
+    type: ${STORAGE_TYPE:local}
+    bucket: ${STORAGE_BUCKET:finledger-proofs}
+    region: ${STORAGE_REGION:us-east-1}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    path-style-access: ${STORAGE_PATH_STYLE:true}
+    local-base-path: ${STORAGE_LOCAL_PATH:./target/blob-store}
+    max-file-size-bytes: ${STORAGE_MAX_FILE_SIZE:5242880}
+    allowed-content-types: ${STORAGE_ALLOWED_TYPES:image/png,image/jpeg,image/webp,application/pdf}
+    presigned-ttl-seconds: ${STORAGE_PRESIGNED_TTL:300}
   security:
     jwt:
       # WAJIB diganti di produksi (minimal 32 byte)
@@ -126,13 +146,27 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
   info:
     env:
       enabled: true
+  # Tag global agar metrik mudah difilter di Grafana
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        finledger.reconciliation.duration: 0.5, 0.95
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 # --- Logging ---
 logging:

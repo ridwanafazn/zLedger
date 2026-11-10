@@ -16,6 +16,8 @@ public class ApiErrorCodes {
     public static final String CONFLICT = "CONFLICT";
     public static final String UNAUTHORIZED = "UNAUTHORIZED";
     public static final String FORBIDDEN = "FORBIDDEN";
+    public static final String PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE";
+    public static final String SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE";
 
     private ApiErrorCodes() {
     }

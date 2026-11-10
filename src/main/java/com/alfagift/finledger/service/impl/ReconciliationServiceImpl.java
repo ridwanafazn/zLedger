@@ -8,6 +8,7 @@ import com.alfagift.finledger.domain.enums.ReconciliationStatus;
 import com.alfagift.finledger.dto.PageResponse;
 import com.alfagift.finledger.dto.ReconciliationDiscrepancyResponse;
 import com.alfagift.finledger.dto.ReconciliationRunResponse;
+import com.alfagift.finledger.infrastructure.metrics.FinLedgerMetrics;
 import com.alfagift.finledger.repository.AccountBalanceCheck;
 import com.alfagift.finledger.repository.AccountRepository;
 import com.alfagift.finledger.repository.JournalBalanceCheck;
@@ -53,11 +54,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private final JournalTransactionRepository journalTransactionRepository;
     private final ReconciliationRunRepository reconciliationRunRepository;
     private final ReconciliationDiscrepancyRepository reconciliationDiscrepancyRepository;
+    private final FinLedgerMetrics metrics;
 
     @Override
     @Transactional
     public ReconciliationRunResponse run(String triggeredBy, String notes) {
         LocalDateTime startedAt = LocalDateTime.now();
+        long startNanos = System.nanoTime();
         long accountsChecked = accountRepository.count();
 
         List<AccountBalanceCheck> mismatches = accountRepository.findBalanceMismatches(EntryType.CREDIT);
@@ -124,6 +127,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         run.setCompletedAt(LocalDateTime.now());
 
         ReconciliationRun saved = reconciliationRunRepository.save(run);
+
+        metrics.reconciliationCompleted(saved.getStatus(), saved.getDiscrepancyCount(),
+                (System.nanoTime() - startNanos) / 1_000_000);
 
         log.info("Rekonsiliasi selesai: id={}, status={}, akun={}, temuan={}, jurnalTidakSeimbang={}",
                 saved.getId(), saved.getStatus(), saved.getAccountsChecked(),

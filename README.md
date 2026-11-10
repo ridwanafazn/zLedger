@@ -23,6 +23,8 @@ FinLedger Engine adalah backend ledger **double-entry** yang dirancang untuk mem
 3. **Earn Points (Asynchronous)** — A_Poin diberikan selepas transaksi melalui Apache Kafka tanpa memblokir aliran checkout utama.
 4. **Ledger Audit** — Sejarah imutabiliti semua pergerakan balans/poin (tidak ada DELETE/UPDATE pada entri ledger).
 5. **Merchant Settlement & Reconciliation** — Batch pendapatan merchant (gross − refund − fee), payout sebagai jurnal `SETTLEMENT`, plus rekonsiliasi saldo akun terhadap ledger.
+6. **Payment Proof Storage** — Unggah bukti bayar ke object storage (S3-compatible) dengan validasi magic bytes dan checksum SHA-256.
+7. **Observability** — Metrik Prometheus (`/actuator/prometheus`) + dashboard Grafana yang di-provision otomatis.
 
 Projek ini dibangun sebagai **Modular Monolith** dengan **Clean Architecture**, mematuhi semua prinsip **SOLID**, dan siap untuk dokumentasi API produksi melalui **Springdoc OpenAPI 3 (Swagger UI)**.
 
@@ -93,7 +95,7 @@ cp .env.example .env
 # Sunting .env jika perlu (default boleh digunakan untuk development)
 ```
 
-### 3. Jalankan infrastruktur (PostgreSQL, Redis, Kafka)
+### 3. Jalankan infrastruktur (PostgreSQL, Redis, Kafka, S3Mock, Prometheus, Grafana)
 
 ```bash
 docker compose up -d
@@ -104,6 +106,19 @@ Semak kesihatan kontena:
 ```bash
 docker compose ps
 ```
+
+| Service | URL / Port | Kredensial |
+|---|---|---|
+| PostgreSQL | `localhost:5432` | `finledger` / `finledger_dev_secret` |
+| Redis | `localhost:6379` | — |
+| Kafka | `localhost:9092` | — |
+| S3Mock (object storage) | `http://localhost:9091` | — |
+| Prometheus | http://localhost:9090 | — |
+| Grafana | http://localhost:3000 | `admin` / `admin` |
+
+> Bukti bayar dapat memakai filesystem lokal (`STORAGE_TYPE=local`, default) atau
+> S3-compatible: `STORAGE_TYPE=s3 STORAGE_ENDPOINT=http://localhost:9091 STORAGE_ACCESS_KEY=foo STORAGE_SECRET_KEY=bar`.
+> MinIO dapat dipakai dengan endpoint `http://localhost:9000` (API sama).
 
 ### 4. Build dan jalankan aplikasi
 
@@ -127,6 +142,23 @@ OpenAPI JSON tersedia di:
 ```
 http://localhost:8080/v3/api-docs
 ```
+
+### 6. Observability
+
+```bash
+# metrik mentah (format Prometheus)
+curl http://localhost:8080/actuator/prometheus
+
+# target scrape & query
+open http://localhost:9090
+
+# dashboard "FinLedger Engine — Overview" (auto-provisioned)
+open http://localhost:3000
+```
+
+Dashboard memuat: request rate, latency p95/p99, error 5xx, TPS checkout,
+batch settlement (created/paid/rejected), nilai payout, rekonsiliasi, unggahan
+bukti bayar, JVM heap, dan koneksi HikariCP.
 
 ---
 
@@ -212,6 +244,11 @@ Mekanisme keamanan tambahan:
 | `POST` | `/api/v1/reconciliation/runs` | Jalankan rekonsiliasi saldo vs ledger (ADMIN) | ✅ |
 | `GET` | `/api/v1/reconciliation/runs` | Riwayat rekonsiliasi (ADMIN) | ✅ |
 | `GET` | `/api/v1/reconciliation/runs/{runId}` | Detail run + temuan (ADMIN) | ✅ |
+| `POST` | `/api/v1/payment-proofs` | Unggah bukti bayar (multipart, CUSTOMER/MERCHANT/ADMIN) | ✅ |
+| `GET` | `/api/v1/payment-proofs?transactionId=` | Daftar bukti bayar per transaksi | ✅ |
+| `GET` | `/api/v1/payment-proofs/{proofId}` | Metadata bukti + `presignedUrl` (bila S3) | ✅ |
+| `GET` | `/api/v1/payment-proofs/{proofId}/content` | Streaming isi file bukti bayar | ✅ |
+| `DELETE` | `/api/v1/payment-proofs/{proofId}` | Hapus bukti bayar + blob (ADMIN) | ✅ |
 
 **Kontrak lintas-endpoint:**
 - `POST`/`PATCH` wajib `X-Idempotency-Key`. Retry identik mengembalikan respons sukses yang sama (cached), payload berbeda → `409`.
@@ -234,6 +271,7 @@ Mekanisme keamanan tambahan:
 | [`docs/04_AGENT_TASKS.md`](docs/04_AGENT_TASKS.md) | Roadmap eksekusi & status sprint |
 | [`docs/05_LOAD_TEST_PROOFS.md`](docs/05_LOAD_TEST_PROOFS.md) | Rencana bukti konkurensi & performa |
 | [`docs/ADR/`](docs/ADR/) | Architecture Decision Records |
+| [`docs/BLOB_STORAGE_DECISION.md`](docs/BLOB_STORAGE_DECISION.md) | Keputusan blob storage & bukti bayar (Fase J) |
 | [`PRD TRD.md`](PRD%20TRD.md) | Product & Technical Requirements (historis) |
 | [`ERD.md`](ERD.md) | Entity Relationship Diagram |
 | [`BUILD_MANIFEST.md`](BUILD_MANIFEST.md) | Bukti progres & roadmap |
