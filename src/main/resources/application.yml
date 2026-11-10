@@ -90,6 +90,8 @@ server:
 
 # --- Application Security (JWT + RBAC) ---
 app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
   outbox:
     poll-interval-ms: ${OUTBOX_POLL_INTERVAL_MS:2000}
     max-attempts: ${OUTBOX_MAX_ATTEMPTS:5}

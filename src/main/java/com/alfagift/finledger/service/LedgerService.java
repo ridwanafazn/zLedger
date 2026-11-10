@@ -2,7 +2,9 @@ package com.alfagift.finledger.service;
 
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.MutationResponse;
 import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.ReversalResponse;
 import com.alfagift.finledger.dto.TransactionDetailResponse;
 import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
@@ -47,12 +49,14 @@ public interface LedgerService {
     CheckoutResponse redeemFlashSale(String ownerId, UUID voucherId, Integer points, String idempotencyKey);
 
     /**
-     * Ambil semua mutasi (ledger entries) bagi akaun tertentu.
+     * Ambil mutasi (ledger entries) bagi akaun tertentu dengan pagination.
      *
      * @param accountId ID akaun
-     * @return senarai mutasi akaun
+     * @param page      halaman (0-based)
+     * @param size      ukuran halaman (maks 100)
+     * @return halaman mutasi akun
      */
-    java.util.List<com.alfagift.finledger.domain.entities.LedgerEntry> getAccountMutations(UUID accountId);
+    PageResponse<MutationResponse> getAccountMutations(UUID accountId, int page, int size);
 
     /**
      * Daftar transaksi jurnal (paginated), terbaru lebih dulu.
@@ -60,12 +64,29 @@ public interface LedgerService {
      * @param page          nomor halaman (0-based)
      * @param size          ukuran halaman (maks 100)
      * @param referenceType filter opsional (PAYMENT/REDEMPTION/REFUND/REWARD)
+     * @param accountId     filter opsional: transaksi yang menyentuh akun ini
+     * @param from          filter opsional tanggal awal (inklusif)
+     * @param to            filter opsional tanggal akhir (inklusif)
      * @return halaman transaksi
      */
-    PageResponse<TransactionSummaryResponse> listTransactions(int page, int size, String referenceType);
+    PageResponse<TransactionSummaryResponse> listTransactions(
+            int page, int size, String referenceType, UUID accountId,
+            java.time.LocalDate from, java.time.LocalDate to);
 
     /**
      * Detail satu transaksi beserta seluruh entri debit/credit.
      */
     TransactionDetailResponse getTransaction(UUID transactionId);
+
+    /**
+     * Membalik transaksi dengan entri kompensasi (bukan UPDATE/DELETE).
+     * <p>
+     * Aturan immutability: transaksi asal tetap utuh; reversal adalah jurnal baru
+     * bertipe {@code REFUND} yang menunjuk ke transaksi asal.
+     *
+     * @param transactionId ID transaksi asal
+     * @param reason        alasan reversal
+     * @return detail jurnal kompensasi
+     */
+    ReversalResponse reverseTransaction(UUID transactionId, String reason);
 }

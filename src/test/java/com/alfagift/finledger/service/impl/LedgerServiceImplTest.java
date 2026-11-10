@@ -489,11 +489,13 @@ class LedgerServiceImplTest {
                 .journalTransaction(journal).account(merchantAccount)
                 .entryType(EntryType.CREDIT).amount(new BigDecimal("50000.00")).build());
 
-        when(journalTransactionRepository.findAll(any(org.springframework.data.domain.Pageable.class)))
+        when(journalTransactionRepository.findAll(
+                any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class)))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(
                         List.of(journal), org.springframework.data.domain.PageRequest.of(0, 20), 1));
 
-        var page = ledgerService.listTransactions(0, 20, null);
+        var page = ledgerService.listTransactions(0, 20, null, null, null, null);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).getEntryCount()).isEqualTo(2);
@@ -505,11 +507,13 @@ class LedgerServiceImplTest {
     @Test
     @DisplayName("listTransactions harus menolak referenceType tidak valid")
     void listTransactions_shouldRejectInvalidReferenceType() {
-        assertThatThrownBy(() -> ledgerService.listTransactions(0, 20, "FOO"))
+        assertThatThrownBy(() -> ledgerService.listTransactions(0, 20, "FOO", null, null, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("referenceType");
 
-        verify(journalTransactionRepository, never()).findAll(any(org.springframework.data.domain.Pageable.class));
+        verify(journalTransactionRepository, never()).findAll(
+                any(org.springframework.data.jpa.domain.Specification.class),
+                any(org.springframework.data.domain.Pageable.class));
     }
 
     @Test
@@ -550,6 +554,92 @@ class LedgerServiceImplTest {
 
         assertThatThrownBy(() -> ledgerService.getTransaction(transactionId))
                 .isInstanceOf(EntityNotFoundException.class);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Sprint E: reversal                                                  */
+    /* ------------------------------------------------------------------ */
+
+    @Test
+    @DisplayName("Reversal harus membuat jurnal REFUND dengan entri kompensasi")
+    void reverseTransaction_shouldCreateCompensatingEntries() {
+        UUID transactionId = UUID.randomUUID();
+        JournalTransaction original = JournalTransaction.builder()
+                .id(transactionId)
+                .idempotencyKey("idem-original")
+                .referenceType(ReferenceType.PAYMENT)
+                .build();
+
+        LedgerEntry debit = LedgerEntry.builder()
+                .id(UUID.randomUUID()).journalTransaction(original).account(customerAccount)
+                .entryType(EntryType.DEBIT).amount(new BigDecimal("50000.00")).build();
+        LedgerEntry credit = LedgerEntry.builder()
+                .id(UUID.randomUUID()).journalTransaction(original).account(merchantAccount)
+                .entryType(EntryType.CREDIT).amount(new BigDecimal("50000.00")).build();
+
+        when(journalTransactionRepository.findById(transactionId)).thenReturn(Optional.of(original));
+        when(journalTransactionRepository.existsByReversalOfId(transactionId)).thenReturn(false);
+        when(ledgerEntryRepository.findByJournalTransactionId(transactionId))
+                .thenReturn(List.of(debit, credit));
+        when(journalTransactionRepository.save(any(JournalTransaction.class)))
+                .thenAnswer(invocation -> {
+                    JournalTransaction jt = invocation.getArgument(0);
+                    if (jt.getId() == null) {
+                        jt.setId(UUID.randomUUID());
+                    }
+                    return jt;
+                });
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var response = ledgerService.reverseTransaction(transactionId, "barang dikembalikan");
+
+        assertThat(response.getStatus()).isEqualTo("REVERSED");
+        assertThat(response.getReferenceType()).isEqualTo(ReferenceType.REFUND);
+        assertThat(response.getOriginalTransactionId()).isEqualTo(transactionId);
+        assertThat(response.getReversalTransactionId()).isNotNull();
+        assertThat(response.getTotalDebit()).isEqualByComparingTo("50000.00");
+        assertThat(response.getTotalCredit()).isEqualByComparingTo("50000.00");
+
+        // Saldo dibalik: pelanggan +50.000, merchant -50.000
+        assertThat(customerAccount.getBalance()).isEqualByComparingTo("150000.00");
+        assertThat(merchantAccount.getBalance()).isEqualByComparingTo("450000.00");
+        verify(accountRepository).save(customerAccount);
+        verify(accountRepository).save(merchantAccount);
+    }
+
+    @Test
+    @DisplayName("Transaksi yang sudah dibalik tidak boleh dibalik lagi")
+    void reverseTransaction_twice_shouldBeRejected() {
+        UUID transactionId = UUID.randomUUID();
+        JournalTransaction original = JournalTransaction.builder()
+                .id(transactionId)
+                .referenceType(ReferenceType.PAYMENT)
+                .build();
+
+        when(journalTransactionRepository.findById(transactionId)).thenReturn(Optional.of(original));
+        when(journalTransactionRepository.existsByReversalOfId(transactionId)).thenReturn(true);
+
+        assertThatThrownBy(() -> ledgerService.reverseTransaction(transactionId, "dobel"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("sudah pernah dibalik");
+
+        verify(journalTransactionRepository, never()).save(any(JournalTransaction.class));
+    }
+
+    @Test
+    @DisplayName("Transaksi REFUND tidak boleh dibalik")
+    void reverseTransaction_refund_shouldBeRejected() {
+        UUID transactionId = UUID.randomUUID();
+        JournalTransaction refund = JournalTransaction.builder()
+                .id(transactionId)
+                .referenceType(ReferenceType.REFUND)
+                .build();
+
+        when(journalTransactionRepository.findById(transactionId)).thenReturn(Optional.of(refund));
+
+        assertThatThrownBy(() -> ledgerService.reverseTransaction(transactionId, "salah"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("refund");
     }
 
     /* ------------------------------------------------------------------ */

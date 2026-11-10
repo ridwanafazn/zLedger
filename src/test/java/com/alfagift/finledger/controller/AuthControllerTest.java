@@ -41,18 +41,24 @@ class AuthControllerTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private com.alfagift.finledger.infrastructure.security.RefreshTokenService refreshTokenService;
+
+    @Mock
+    private org.springframework.security.core.userdetails.UserDetailsService userDetailsService;
+
     private AuthController authController;
 
     @BeforeEach
     void setUp() {
-        authController = new AuthController(authenticationManager, jwtService);
+        authController = new AuthController(authenticationManager, jwtService, refreshTokenService, userDetailsService);
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
 
     @Test
-    @DisplayName("Login valid harus mengembalikan token dan roles")
+    @DisplayName("Login valid harus mengembalikan access token dan refresh token")
     void login_shouldReturnToken() throws Exception {
         var authentication = new UsernamePasswordAuthenticationToken(
                 "admin", null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
@@ -60,6 +66,7 @@ class AuthControllerTest {
         when(authenticationManager.authenticate(any())).thenReturn(authentication);
         when(jwtService.generateToken("admin", List.of("ADMIN"))).thenReturn("jwt-token");
         when(jwtService.expirySeconds()).thenReturn(3600L);
+        when(refreshTokenService.issue("admin")).thenReturn("refresh-token");
 
         mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -67,6 +74,7 @@ class AuthControllerTest {
                                 AuthLoginRequest.builder().username("admin").password("admin123").build())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accessToken").value("jwt-token"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
                 .andExpect(jsonPath("$.tokenType").value("Bearer"))
                 .andExpect(jsonPath("$.roles[0]").value("ADMIN"));
     }
@@ -103,5 +111,55 @@ class AuthControllerTest {
                         .content("{username:admin}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("Refresh token valid harus mengembalikan token baru (rotasi)")
+    void refresh_shouldReturnNewTokens() throws Exception {
+        var user = org.springframework.security.core.userdetails.User
+                .withUsername("customer")
+                .password("x")
+                .roles("CUSTOMER")
+                .build();
+
+        when(refreshTokenService.consume("refresh-1")).thenReturn("customer");
+        when(userDetailsService.loadUserByUsername("customer")).thenReturn(user);
+        when(jwtService.generateToken("customer", List.of("CUSTOMER"))).thenReturn("jwt-new");
+        when(jwtService.expirySeconds()).thenReturn(3600L);
+        when(refreshTokenService.issue("customer")).thenReturn("refresh-2");
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                com.alfagift.finledger.dto.RefreshTokenRequest.builder()
+                                        .refreshToken("refresh-1").build())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("jwt-new"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh-2"));
+    }
+
+    @Test
+    @DisplayName("Refresh token tidak valid harus 401")
+    void refresh_invalidToken_shouldReturn401() throws Exception {
+        when(refreshTokenService.consume("refresh-lama"))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.UNAUTHORIZED, "Refresh token tidak valid atau kedaluwarsa"));
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-lama\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    @DisplayName("Logout harus mencabut refresh token (204)")
+    void logout_shouldRevokeToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"refresh-1\"}"))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(refreshTokenService).revoke("refresh-1");
     }
 }

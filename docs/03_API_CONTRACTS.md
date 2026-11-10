@@ -10,9 +10,12 @@ All endpoints are prefixed with `/api/v1`.
 - `GET /accounts`: Search with filters + pagination.
 - `POST /ledger/checkout`: Process a multi-tender transaction.
 - `POST /ledger/flash-sale/redeem`: High-concurrency voucher redemption.
-- `GET /ledger/transactions`: Paginated journal list.
+- `GET /ledger/transactions`: Paginated journal list (filters: `referenceType`, `accountId`, `from`, `to`).
 - `GET /ledger/transactions/{transactionId}`: Transaction detail with debit/credit entries.
-- `GET /accounts/{accountId}/mutations`: Per-account audit history.
+- `POST /ledger/transactions/{transactionId}/reverse`: Reversal/refund via compensating journal (ADMIN).
+- `GET /accounts/{accountId}/mutations`: Per-account audit history (paginated).
+- `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
+- CORS: origin frontend diatur via `app.cors.allowed-origins`.
 
 ## 2. The Idempotency Promise
 Mobile devs MUST include the `X-Idempotency-Key` header on all `POST` and `PATCH` requests. 

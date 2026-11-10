@@ -23,8 +23,9 @@ You are a Principal Java Engineer. Read the current environment state carefully 
 - [x] Transactional Outbox untuk reliabilitas Kafka.
 - [x] k6 + harness konkurensi lokal; bukti di `docs/05_LOAD_TEST_PROOFS.md`.
 - [x] SpotBugs + OWASP Dependency-Check profile di CI.
+- [x] Sprint E lokal: reversal/refund, mutasi paginated, filter transaksi, CORS, refresh token.
 
 ## 🔮 FUTURE SPRINT (Wait for explicit user permission)
-- [ ] Reversal/Refund Ledger Logic.
 - [ ] Actuator dashboards (Prometheus/Grafana).
-- [ ] Database-backed user store + refresh token.
+- [ ] Database-backed user store + registration.
+- [ ] Cloud deployment (Cloud Run + Cloud SQL) + smoke test live.

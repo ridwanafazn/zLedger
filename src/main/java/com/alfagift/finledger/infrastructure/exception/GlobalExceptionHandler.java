@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -100,6 +101,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Malformed Request Body",
                 ApiErrorCodes.INVALID_REQUEST,
                 "Body request tidak dapat dibaca atau formatnya tidak valid", null, request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ProblemDetailResponse> handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, WebRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Invalid Request Parameter",
+                ApiErrorCodes.INVALID_REQUEST,
+                "Nilai parameter '" + ex.getName() + "' tidak valid: " + ex.getValue(), null, request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

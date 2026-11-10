@@ -5,7 +5,9 @@ import com.alfagift.finledger.domain.enums.ReferenceType;
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutRequest.TenderDetail;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.MutationResponse;
 import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.ReversalResponse;
 import com.alfagift.finledger.dto.TransactionDetailResponse;
 import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.InsufficientBalanceException;
@@ -32,6 +34,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -138,6 +141,46 @@ class LedgerControllerTest {
     }
 
     @Test
+    @DisplayName("POST /transactions/{id}/reverse harus mengembalikan status REVERSED")
+    void reverseTransaction_shouldReturn200() throws Exception {
+        UUID transactionId = UUID.randomUUID();
+        ReversalResponse response = ReversalResponse.builder()
+                .originalTransactionId(transactionId)
+                .reversalTransactionId(UUID.randomUUID())
+                .referenceType(ReferenceType.REFUND)
+                .totalDebit(new BigDecimal("50000.00"))
+                .totalCredit(new BigDecimal("50000.00"))
+                .reason("uji")
+                .status("REVERSED")
+                .build();
+
+        when(ledgerService.reverseTransaction(eq(transactionId), eq("uji"))).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/ledger/transactions/{id}/reverse", transactionId)
+                        .header("X-Idempotency-Key", "rev-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"uji\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REVERSED"))
+                .andExpect(jsonPath("$.referenceType").value("REFUND"));
+    }
+
+    @Test
+    @DisplayName("Reversal ganda harus 400")
+    void reverseTransaction_twice_shouldReturn400() throws Exception {
+        UUID transactionId = UUID.randomUUID();
+        when(ledgerService.reverseTransaction(eq(transactionId), any()))
+                .thenThrow(new IllegalArgumentException("Transaksi sudah pernah dibalik"));
+
+        mockMvc.perform(post("/api/v1/ledger/transactions/{id}/reverse", transactionId)
+                        .header("X-Idempotency-Key", "rev-2")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"dobel\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("INVALID_REQUEST"));
+    }
+
+    @Test
     @DisplayName("GET /accounts/{id}/mutations harus mengembalikan daftar mutasi")
     void getMutations_shouldReturnListOfLedgerEntries() throws Exception {
         // Given
@@ -148,12 +191,24 @@ class LedgerControllerTest {
                         .amount(new BigDecimal("50000.00"))
                         .build();
 
-        when(ledgerService.getAccountMutations(accountId)).thenReturn(List.of(entry));
+        when(ledgerService.getAccountMutations(accountId, 0, 20)).thenReturn(
+                PageResponse.<MutationResponse>builder()
+                        .content(List.of(MutationResponse.builder()
+                                .id(UUID.randomUUID())
+                                .accountId(accountId)
+                                .amount(new BigDecimal("50000.00"))
+                                .build()))
+                        .page(PageResponse.PageMetadata.builder()
+                                .number(0).size(20).totalElements(1).totalPages(1)
+                                .first(true).last(true).numberOfElements(1)
+                                .build())
+                        .sort(List.of())
+                        .build());
 
         // When & Then
         mockMvc.perform(get("/api/v1/ledger/accounts/{accountId}/mutations", accountId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].amount").value(50000.00));
+                .andExpect(jsonPath("$.content[0].amount").value(50000.00));
     }
 
     @Test
@@ -252,7 +307,7 @@ class LedgerControllerTest {
                         .field("createdAt").direction("DESC").build()))
                 .build();
 
-        when(ledgerService.listTransactions(0, 20, null)).thenReturn(page);
+        when(ledgerService.listTransactions(0, 20, null, null, null, null)).thenReturn(page);
 
         mockMvc.perform(get("/api/v1/ledger/transactions"))
                 .andExpect(status().isOk())
@@ -272,7 +327,7 @@ class LedgerControllerTest {
                 .sort(List.of())
                 .build();
 
-        when(ledgerService.listTransactions(0, 20, "PAYMENT")).thenReturn(empty);
+        when(ledgerService.listTransactions(0, 20, "PAYMENT", null, null, null)).thenReturn(empty);
 
         mockMvc.perform(get("/api/v1/ledger/transactions").param("referenceType", "PAYMENT"))
                 .andExpect(status().isOk());

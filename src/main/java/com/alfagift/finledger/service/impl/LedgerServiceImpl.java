@@ -11,7 +11,9 @@ import com.alfagift.finledger.domain.entities.LedgerEntry;
 import com.alfagift.finledger.domain.events.PointsAwardedEvent;
 import com.alfagift.finledger.dto.CheckoutRequest;
 import com.alfagift.finledger.dto.CheckoutResponse;
+import com.alfagift.finledger.dto.MutationResponse;
 import com.alfagift.finledger.dto.PageResponse;
+import com.alfagift.finledger.dto.ReversalResponse;
 import com.alfagift.finledger.dto.TransactionDetailResponse;
 import com.alfagift.finledger.dto.TransactionSummaryResponse;
 import com.alfagift.finledger.infrastructure.AccountInactiveException;
@@ -30,6 +32,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -220,20 +223,58 @@ public class LedgerServiceImpl implements LedgerService {
     }
 
     @Override
-    public List<LedgerEntry> getAccountMutations(UUID accountId) {
-        return ledgerEntryRepository.findByAccountIdOrderByCreatedAtDesc(accountId);
-    }
-
-    @Override
     @Transactional(readOnly = true)
-    public PageResponse<TransactionSummaryResponse> listTransactions(int page, int size, String referenceType) {
+    public PageResponse<MutationResponse> getAccountMutations(UUID accountId, int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 100);
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
 
-        Page<JournalTransaction> transactions = (referenceType == null || referenceType.isBlank())
-                ? journalTransactionRepository.findAll(pageable)
-                : journalTransactionRepository.findByReferenceType(parseReferenceType(referenceType), pageable);
+        Page<LedgerEntry> mutations = ledgerEntryRepository.findByAccountId(accountId, pageable);
+
+        List<MutationResponse> content = mutations.getContent().stream()
+                .map(entry -> MutationResponse.builder()
+                        .id(entry.getId())
+                        .transactionId(entry.getJournalTransaction().getId())
+                        .accountId(entry.getAccount().getId())
+                        .entryType(entry.getEntryType())
+                        .amount(entry.getAmount())
+                        .description(entry.getJournalTransaction().getDescription())
+                        .createdAt(entry.getCreatedAt())
+                        .build())
+                .toList();
+
+        return PageResponse.<MutationResponse>builder()
+                .content(content)
+                .page(PageResponse.PageMetadata.builder()
+                        .number(mutations.getNumber())
+                        .size(mutations.getSize())
+                        .totalElements(mutations.getTotalElements())
+                        .totalPages(mutations.getTotalPages())
+                        .first(mutations.isFirst())
+                        .last(mutations.isLast())
+                        .numberOfElements(mutations.getNumberOfElements())
+                        .build())
+                .sort(List.of(PageResponse.SortInfo.builder()
+                        .field("createdAt")
+                        .direction("DESC")
+                        .build()))
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<TransactionSummaryResponse> listTransactions(
+            int page, int size, String referenceType, UUID accountId,
+            java.time.LocalDate from, java.time.LocalDate to) {
+
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Specification<JournalTransaction> specification = buildTransactionSpecification(
+                referenceType, accountId, from, to);
+
+        Page<JournalTransaction> transactions = journalTransactionRepository.findAll(specification, pageable);
 
         List<TransactionSummaryResponse> content = transactions.getContent().stream()
                 .map(this::toSummary)
@@ -301,6 +342,113 @@ public class LedgerServiceImpl implements LedgerService {
                 .balanced(totalDebit.compareTo(totalCredit) == 0)
                 .entries(entryDtos)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    @Idempotent
+    public ReversalResponse reverseTransaction(UUID transactionId, String reason) {
+        JournalTransaction original = journalTransactionRepository.findById(transactionId)
+                .orElseThrow(() -> new EntityNotFoundException("Transaksi tidak ditemukan: " + transactionId));
+
+        if (original.getReferenceType() == ReferenceType.REFUND) {
+            throw new IllegalArgumentException("Transaksi refund tidak dapat dibalik lagi");
+        }
+        if (journalTransactionRepository.existsByReversalOfId(transactionId)) {
+            throw new IllegalArgumentException("Transaksi " + transactionId + " sudah pernah dibalik");
+        }
+
+        List<LedgerEntry> originalEntries = ledgerEntryRepository.findByJournalTransactionId(transactionId);
+        if (originalEntries.isEmpty()) {
+            throw new IllegalArgumentException("Transaksi tidak memiliki entri ledger");
+        }
+
+        List<Account> accounts = originalEntries.stream()
+                .map(LedgerEntry::getAccount)
+                .distinct()
+                .toList();
+        lockAccountsForUpdate(accounts.toArray(new Account[0]));
+
+        JournalTransaction reversal = JournalTransaction.builder()
+                .idempotencyKey("REVERSAL-" + transactionId)
+                .referenceType(ReferenceType.REFUND)
+                .reversalOfId(transactionId)
+                .description(String.format("Reversal untuk transaksi %s: %s", transactionId, reason))
+                .build();
+        reversal = journalTransactionRepository.save(reversal);
+
+        BigDecimal totalDebit = BigDecimal.ZERO;
+        BigDecimal totalCredit = BigDecimal.ZERO;
+
+        for (LedgerEntry entry : originalEntries) {
+            EntryType compensatingType = entry.getEntryType() == EntryType.DEBIT
+                    ? EntryType.CREDIT : EntryType.DEBIT;
+
+            LedgerEntry compensating = LedgerEntry.builder()
+                    .journalTransaction(reversal)
+                    .account(entry.getAccount())
+                    .entryType(compensatingType)
+                    .amount(entry.getAmount())
+                    .build();
+            reversal.addLedgerEntry(compensating);
+
+            if (compensatingType == EntryType.DEBIT) {
+                totalDebit = totalDebit.add(entry.getAmount());
+                entry.getAccount().setBalance(entry.getAccount().getBalance().subtract(entry.getAmount()));
+            } else {
+                totalCredit = totalCredit.add(entry.getAmount());
+                entry.getAccount().setBalance(entry.getAccount().getBalance().add(entry.getAmount()));
+            }
+        }
+
+        accounts.forEach(accountRepository::save);
+        journalTransactionRepository.save(reversal);
+
+        log.info("Transaksi {} dibalik oleh {} (total debit={}, credit={})",
+                transactionId, reversal.getId(), totalDebit, totalCredit);
+
+        return ReversalResponse.builder()
+                .originalTransactionId(transactionId)
+                .reversalTransactionId(reversal.getId())
+                .referenceType(ReferenceType.REFUND)
+                .totalDebit(totalDebit)
+                .totalCredit(totalCredit)
+                .reason(reason)
+                .processedAt(LocalDateTime.now())
+                .status("REVERSED")
+                .build();
+    }
+
+    private Specification<JournalTransaction> buildTransactionSpecification(
+            String referenceType, UUID accountId, java.time.LocalDate from, java.time.LocalDate to) {
+
+        ReferenceType type = (referenceType == null || referenceType.isBlank())
+                ? null : parseReferenceType(referenceType);
+        LocalDateTime fromTime = from != null ? from.atStartOfDay() : null;
+        LocalDateTime toTime = to != null ? to.atTime(23, 59, 59) : null;
+
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new java.util.ArrayList<>();
+
+            if (type != null) {
+                predicates.add(cb.equal(root.get("referenceType"), type));
+            }
+            if (fromTime != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), fromTime));
+            }
+            if (toTime != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), toTime));
+            }
+            if (accountId != null && query != null) {
+                var subquery = query.subquery(UUID.class);
+                var entryRoot = subquery.from(LedgerEntry.class);
+                subquery.select(entryRoot.get("journalTransaction").get("id"))
+                        .where(cb.equal(entryRoot.get("account").get("id"), accountId));
+                predicates.add(root.get("id").in(subquery));
+            }
+
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
     }
 
     private TransactionSummaryResponse toSummary(JournalTransaction journal) {

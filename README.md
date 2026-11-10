@@ -165,14 +165,22 @@ curl http://localhost:8080/api/v1/ledger/accounts \
 | `GET` | `/api/v1/ledger/accounts/{accountId}/balance` | Inquiry saldo | ✅ |
 | `PATCH` | `/api/v1/ledger/accounts/{accountId}/status` | Ubah status (ACTIVE/SUSPENDED/CLOSED) | ✅ |
 | `GET` | `/api/v1/ledger/accounts` | Cari akun (filter + pagination) | ✅ |
-| `GET` | `/api/v1/ledger/transactions` | Daftar transaksi jurnal | ✅ |
+| `GET` | `/api/v1/ledger/transactions` | Daftar transaksi (filter `referenceType`, `accountId`, `from`, `to`) | ✅ |
 | `GET` | `/api/v1/ledger/transactions/{transactionId}` | Detail transaksi + entri debit/credit | ✅ |
+| `POST` | `/api/v1/ledger/transactions/{transactionId}/reverse` | Reversal via jurnal kompensasi (REFUND) | ✅ |
+| `POST` | `/api/v1/auth/login` | Login → access + refresh token | ✅ |
+| `POST` | `/api/v1/auth/refresh` | Rotasi refresh token | ✅ |
+| `POST` | `/api/v1/auth/logout` | Cabut refresh token | ✅ |
+| `GET` | `/api/v1/auth/me` | Identitas dari token aktif | ✅ |
+| `GET` | `/api/v1/ledger/accounts/{accountId}/mutations` | Mutasi akun (paginated) | ✅ |
 
 **Kontrak lintas-endpoint:**
 - `POST`/`PATCH` wajib `X-Idempotency-Key`. Retry identik mengembalikan respons sukses yang sama (cached), payload berbeda → `409`.
 - Semua error berformat **RFC 7807** (`application/problem+json`) dengan `type`, `title`, `detail`, `instance`, `errorCode`.
 - Setiap respons menyertakan `X-Request-ID` (dipakai juga di log).
 - Metrik checkout tersedia di `/actuator/metrics/ledger.checkout`.
+- CORS diaktifkan untuk `http://localhost:3000` dan `http://localhost:5173` (atur via `CORS_ALLOWED_ORIGINS`).
+- Reversal tidak mengubah transaksi asal; dibuat jurnal `REFUND` dengan entri kompensasi (`debit ↔ credit`).
 
 ---
 

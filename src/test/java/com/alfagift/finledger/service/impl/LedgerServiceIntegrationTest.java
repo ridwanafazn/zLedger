@@ -248,11 +248,12 @@ class LedgerServiceIntegrationTest {
         CheckoutResponse response = ledgerService.processMultiTenderPayment(request);
 
         // When
-        List<LedgerEntry> mutations = ledgerService.getAccountMutations(customerAccount.getId());
+        List<com.alfagift.finledger.dto.MutationResponse> mutations =
+                ledgerService.getAccountMutations(customerAccount.getId(), 0, 20).getContent();
 
         // Then
         assertThat(mutations).isNotEmpty();
-        assertThat(mutations.get(0).getJournalTransaction().getId()).isEqualTo(response.getTransactionId());
+        assertThat(mutations.get(0).getTransactionId()).isEqualTo(response.getTransactionId());
         assertThat(mutations.get(0).getEntryType()).isEqualTo(EntryType.DEBIT);
     }
 }

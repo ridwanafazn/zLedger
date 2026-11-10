@@ -49,6 +49,12 @@ public class JournalTransaction {
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
 
+    /**
+     * Bila transaksi ini adalah reversal, menunjuk ke transaksi asal.
+     */
+    @Column(name = "reversal_of_id", columnDefinition = "UUID")
+    private UUID reversalOfId;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

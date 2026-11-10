@@ -16,7 +16,13 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
     List<LedgerEntry> findByJournalTransactionId(UUID transactionId);
 
     /**
-     * Semua entri ledger bagi suatu akaun (mutasi akaun).
+     * Semua entri ledger bagi suatu akaun (mutasi akaun), terbaru dulu.
      */
     List<LedgerEntry> findByAccountIdOrderByCreatedAtDesc(UUID accountId);
+
+    /**
+     * Mutasi akaun dengan pagination.
+     */
+    org.springframework.data.domain.Page<LedgerEntry> findByAccountId(
+            UUID accountId, org.springframework.data.domain.Pageable pageable);
 }

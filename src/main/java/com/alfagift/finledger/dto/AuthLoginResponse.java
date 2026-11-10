@@ -18,6 +18,7 @@ public class AuthLoginResponse {
     private String accessToken;
     private String tokenType;
     private long expiresInSeconds;
+    private String refreshToken;
     private String username;
     private List<String> roles;
 }
