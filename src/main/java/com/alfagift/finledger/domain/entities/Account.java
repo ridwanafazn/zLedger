@@ -1,12 +1,15 @@
 package com.alfagift.finledger.domain.entities;
 
+import com.alfagift.finledger.domain.enums.AccountStatus;
 import com.alfagift.finledger.domain.enums.AccountType;
 import com.alfagift.finledger.domain.enums.Currency;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -46,15 +49,24 @@ public class Account {
     private String accountName;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "account_type", nullable = false)
     private AccountType accountType;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "currency", nullable = false)
     private Currency currency;
 
     @Column(name = "balance", nullable = false, precision = 19, scale = 4)
+    @Builder.Default
     private BigDecimal balance = BigDecimal.ZERO;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "status", nullable = false)
+    @Builder.Default
+    private AccountStatus status = AccountStatus.ACTIVE;
 
     @Version
     @Column(name = "version")

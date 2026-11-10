@@ -117,9 +117,9 @@ class LedgerServiceImplTest {
     @DisplayName("Test Case 1: Harus buat transaksi double-entry berjaya (DEBIT = CREDIT)")
     void processMultiTenderPayment_shouldCreateSuccessfulDoubleEntryTransaction() {
         // Given
-        when(accountRepository.findByOwnerIdAndCurrency("cust-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
                 .thenReturn(Optional.of(customerAccount));
-        when(accountRepository.findByOwnerIdAndCurrency("merch-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
                 .thenReturn(Optional.of(merchantAccount));
         when(journalTransactionRepository.save(any(JournalTransaction.class)))
                 .thenAnswer(invocation -> {
@@ -219,9 +219,9 @@ class LedgerServiceImplTest {
                 .balance(new BigDecimal("500000.00"))
                 .build();
 
-        when(accountRepository.findByOwnerIdAndCurrency("cust-001", Currency.A_POIN))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.A_POIN))
                 .thenReturn(Optional.of(apoinCustomer));
-        when(accountRepository.findByOwnerIdAndCurrency("merch-001", Currency.A_POIN))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.A_POIN))
                 .thenReturn(Optional.of(apoinMerchant));
         when(journalTransactionRepository.save(any(JournalTransaction.class)))
                 .thenAnswer(invocation -> {
@@ -263,9 +263,9 @@ class LedgerServiceImplTest {
                 .balance(new BigDecimal("10000.00"))
                 .build();
 
-        when(accountRepository.findByOwnerIdAndCurrency("cust-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
                 .thenReturn(Optional.of(poorCustomer));
-        when(accountRepository.findByOwnerIdAndCurrency("merch-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
                 .thenReturn(Optional.of(merchantAccount));
 
         // When & Then
@@ -283,7 +283,7 @@ class LedgerServiceImplTest {
     @DisplayName("Harus melempar InsufficientBalanceException jika akaun pelanggan tidak dijumpai (dibuat dengan balans nol)")
     void processMultiTenderPayment_shouldThrowWhenCustomerAccountNotFound() {
         // Given - akaun tidak dijumpai, sistem akan mencipta akaun baru dengan balans nol
-        when(accountRepository.findByOwnerIdAndCurrency("cust-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
                 .thenReturn(Optional.empty());
         when(accountRepository.save(any(Account.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -305,9 +305,9 @@ class LedgerServiceImplTest {
     @DisplayName("Harus memelihara integritas balans setelah transaksi berurutan")
     void shouldMaintainBalanceIntegrityAfterSequentialTransactions() {
         // Given
-        when(accountRepository.findByOwnerIdAndCurrency("cust-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
                 .thenReturn(Optional.of(customerAccount));
-        when(accountRepository.findByOwnerIdAndCurrency("merch-001", Currency.IDR))
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
                 .thenReturn(Optional.of(merchantAccount));
         when(journalTransactionRepository.save(any(JournalTransaction.class)))
                 .thenAnswer(invocation -> {

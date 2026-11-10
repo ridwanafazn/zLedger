@@ -201,7 +201,7 @@ public class LedgerServiceImpl implements LedgerService {
     /* ------------------------------------------------------------------ */
 
     private Account getOrCreateCustomerAccount(String ownerId, Currency currency) {
-        return accountRepository.findByOwnerIdAndCurrency(ownerId, currency)
+        return accountRepository.findAccountByOwnerIdAndCurrencyCustom(ownerId, currency)
                 .orElseGet(() -> {
                     Account acc = Account.builder()
                             .ownerId(ownerId)
@@ -215,7 +215,7 @@ public class LedgerServiceImpl implements LedgerService {
     }
 
     private Account getOrCreateMerchantAccount(String merchantId, Currency currency) {
-        return accountRepository.findByOwnerIdAndCurrency(merchantId, currency)
+        return accountRepository.findAccountByOwnerIdAndCurrencyCustom(merchantId, currency)
                 .orElseGet(() -> {
                     Account acc = Account.builder()
                             .ownerId(merchantId)
@@ -229,7 +229,7 @@ public class LedgerServiceImpl implements LedgerService {
     }
 
     private Account getOrCreatePromoPool() {
-        return accountRepository.findByOwnerIdAndCurrency("system", Currency.A_POIN)
+        return accountRepository.findAccountByOwnerIdAndCurrencyCustom("system", Currency.A_POIN)
                 .orElseGet(() -> {
                     Account acc = Account.builder()
                             .ownerId("system")
