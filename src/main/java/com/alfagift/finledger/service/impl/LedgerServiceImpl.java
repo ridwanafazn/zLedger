@@ -38,7 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -72,23 +75,37 @@ public class LedgerServiceImpl implements LedgerService {
         log.info("Memproses pembayaran multi-tender untuk ownerId={}, total={} {}",
                 request.getOwnerId(), request.getTotalAmount(), request.getCurrency());
 
-        // 1. Ambil atau buat akaun pelanggan (LIABILITY — wang pelanggan adalah kewajiban sistem)
-        Account customerAccount = getOrCreateCustomerAccount(request.getOwnerId(), request.getCurrency());
+        // 1. Tender adalah sumber kebenaran pembagian saldo, bukan field currency.
+        Map<Currency, BigDecimal> tenderByCurrency = groupTendersByCurrency(request);
+        validateTenderTotal(request, tenderByCurrency);
 
-        // 2. Ambil akaun merchant (REVENUE)
-        Account merchantAccount = getOrCreateMerchantAccount(request.getMerchantId(), request.getCurrency());
+        // 2. Ambil atau buat akaun pelanggan + merchant untuk SETIAP mata uang yang terlibat.
+        Map<Currency, Account> customerAccounts = new LinkedHashMap<>();
+        Map<Currency, Account> merchantAccounts = new LinkedHashMap<>();
+        for (Currency currency : tenderByCurrency.keySet()) {
+            customerAccounts.put(currency, getOrCreateCustomerAccount(request.getOwnerId(), currency));
+            merchantAccounts.put(currency, getOrCreateMerchantAccount(request.getMerchantId(), currency));
+        }
 
-        // 3. Kunci kedua akaun dengan urutan deterministik (cegah deadlock) dan
-        //    pastikan statusnya ACTIVE sebelum mengubah saldo.
-        lockAccountsForUpdate(customerAccount, merchantAccount);
-        ensureActive(customerAccount);
-        ensureActive(merchantAccount);
+        // 3. Kunci semua akaun dalam urutan deterministik (cegah deadlock).
+        List<Account> accountsToLock = new ArrayList<>();
+        accountsToLock.addAll(customerAccounts.values());
+        accountsToLock.addAll(merchantAccounts.values());
+        lockAccountsForUpdate(accountsToLock.toArray(new Account[0]));
 
-        // 4. Validasi balans pelanggan mencukupi untuk total pembayaran
-        if (customerAccount.getBalance().compareTo(request.getTotalAmount()) < 0) {
-            throw new InsufficientBalanceException(
-                    String.format("Balans %s tidak mencukupi. Tersedia: %s, Diperlukan: %s",
-                            request.getCurrency(), customerAccount.getBalance(), request.getTotalAmount()));
+        // 4. Validasi status + saldo per mata uang sebelum menulis apa pun.
+        for (Map.Entry<Currency, BigDecimal> entry : tenderByCurrency.entrySet()) {
+            Account customer = customerAccounts.get(entry.getKey());
+            Account merchant = merchantAccounts.get(entry.getKey());
+
+            ensureActive(customer);
+            ensureActive(merchant);
+
+            if (customer.getBalance().compareTo(entry.getValue()) < 0) {
+                throw new InsufficientBalanceException(
+                        String.format("Balans %s tidak mencukupi. Tersedia: %s, Diperlukan: %s",
+                                entry.getKey(), customer.getBalance(), entry.getValue()));
+            }
         }
 
         // 5. Buat JournalTransaction
@@ -100,42 +117,46 @@ public class LedgerServiceImpl implements LedgerService {
                 .build();
         journal = journalTransactionRepository.save(journal);
 
-        // 6. Buat entri ledger: DEBIT pelanggan, CREDIT merchant
-        LedgerEntry debitEntry = LedgerEntry.builder()
-                .journalTransaction(journal)
-                .account(customerAccount)
-                .entryType(EntryType.DEBIT)
-                .amount(request.getTotalAmount())
-                .build();
+        // 6. Satu pasang DEBIT/CREDIT per mata uang, lalu update saldo masing-masing.
+        Map<Currency, BigDecimal> balances = new LinkedHashMap<>();
+        for (Map.Entry<Currency, BigDecimal> entry : tenderByCurrency.entrySet()) {
+            Currency currency = entry.getKey();
+            BigDecimal amount = entry.getValue();
+            Account customer = customerAccounts.get(currency);
+            Account merchant = merchantAccounts.get(currency);
 
-        LedgerEntry creditEntry = LedgerEntry.builder()
-                .journalTransaction(journal)
-                .account(merchantAccount)
-                .entryType(EntryType.CREDIT)
-                .amount(request.getTotalAmount())
-                .build();
+            journal.addLedgerEntry(LedgerEntry.builder()
+                    .journalTransaction(journal)
+                    .account(customer)
+                    .entryType(EntryType.DEBIT)
+                    .amount(amount)
+                    .build());
 
-        journal.addLedgerEntry(debitEntry);
-        journal.addLedgerEntry(creditEntry);
+            journal.addLedgerEntry(LedgerEntry.builder()
+                    .journalTransaction(journal)
+                    .account(merchant)
+                    .entryType(EntryType.CREDIT)
+                    .amount(amount)
+                    .build());
 
-        // 7. Kemaskini balans
-        customerAccount.setBalance(customerAccount.getBalance().subtract(request.getTotalAmount()));
-        merchantAccount.setBalance(merchantAccount.getBalance().add(request.getTotalAmount()));
+            customer.setBalance(customer.getBalance().subtract(amount));
+            merchant.setBalance(merchant.getBalance().add(amount));
 
-        accountRepository.save(customerAccount);
-        accountRepository.save(merchantAccount);
+            accountRepository.save(customer);
+            accountRepository.save(merchant);
+
+            balances.put(currency, customer.getBalance());
+        }
+
         journalTransactionRepository.save(journal);
 
-        // 8. Kirim Kafka event jika A_Poin terlibat dalam tenders
-        boolean involvesAPoin = request.getTenders().stream()
-                .anyMatch(t -> t.getCurrency() == Currency.A_POIN);
-
-        if (involvesAPoin) {
+        // 7. Kirim Kafka event jika A_Poin terlibat dalam tenders
+        if (tenderByCurrency.containsKey(Currency.A_POIN)) {
             PointsAwardedEvent event = PointsAwardedEvent.builder()
                     .transactionId(journal.getId().toString())
                     .ownerId(request.getOwnerId())
                     .currency(Currency.A_POIN)
-                    .amount(request.getTotalAmount())
+                    .amount(tenderByCurrency.get(Currency.A_POIN))
                     .awardedAt(LocalDateTime.now())
                     .description("Hadiah A_Poin untuk pembayaran multi-tender")
                     .build();
@@ -144,16 +165,67 @@ public class LedgerServiceImpl implements LedgerService {
                     "POINTS_AWARDED", event);
         }
 
+        Currency primaryCurrency = resolvePrimaryCurrency(request, tenderByCurrency);
+
         return CheckoutResponse.builder()
                 .transactionId(journal.getId())
                 .ownerId(request.getOwnerId())
                 .merchantId(request.getMerchantId())
-                .currency(request.getCurrency())
+                .currency(primaryCurrency)
                 .totalAmount(request.getTotalAmount())
-                .balanceRemaining(customerAccount.getBalance())
+                .balanceRemaining(balances.get(primaryCurrency))
+                .balances(balances)
                 .processedAt(LocalDateTime.now())
                 .status("SUCCESS")
                 .build();
+    }
+
+    /**
+     * Mengelompokkan tender per mata uang. Tender dengan mata uang sama dijumlahkan.
+     */
+    private Map<Currency, BigDecimal> groupTendersByCurrency(CheckoutRequest request) {
+        if (request.getTenders() == null || request.getTenders().isEmpty()) {
+            throw new IllegalArgumentException("Minimal satu tender wajib disediakan");
+        }
+
+        Map<Currency, BigDecimal> grouped = new LinkedHashMap<>();
+        for (CheckoutRequest.TenderDetail tender : request.getTenders()) {
+            if (tender.getCurrency() == null || tender.getAmount() == null) {
+                throw new IllegalArgumentException("Setiap tender wajib memiliki currency dan amount");
+            }
+            if (tender.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Jumlah tender harus lebih besar dari nol");
+            }
+            grouped.merge(tender.getCurrency(), tender.getAmount(), BigDecimal::add);
+        }
+        return grouped;
+    }
+
+    /**
+     * Memastikan total tender sama dengan totalAmount agar tidak ada selisih
+     * yang tidak tercatat di ledger.
+     */
+    private void validateTenderTotal(CheckoutRequest request, Map<Currency, BigDecimal> tenderByCurrency) {
+        BigDecimal tenderTotal = tenderByCurrency.values().stream()
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (tenderTotal.compareTo(request.getTotalAmount()) != 0) {
+            throw new IllegalArgumentException(String.format(
+                    "Total tender (%s) tidak sama dengan totalAmount (%s)",
+                    tenderTotal, request.getTotalAmount()));
+        }
+    }
+
+    /**
+     * Mata uang utama untuk response: pakai request.currency bila terlibat,
+     * jika tidak pakai mata uang tender pertama.
+     */
+    private Currency resolvePrimaryCurrency(CheckoutRequest request, Map<Currency, BigDecimal> tenderByCurrency) {
+        Currency requested = request.getCurrency();
+        if (requested != null && tenderByCurrency.containsKey(requested)) {
+            return requested;
+        }
+        return tenderByCurrency.keySet().iterator().next();
     }
 
     @Override
@@ -217,6 +289,7 @@ public class LedgerServiceImpl implements LedgerService {
                 .currency(Currency.A_POIN)
                 .totalAmount(pointsBigDecimal)
                 .balanceRemaining(customerAccount.getBalance())
+                .balances(Map.of(Currency.A_POIN, customerAccount.getBalance()))
                 .processedAt(LocalDateTime.now())
                 .status("SUCCESS")
                 .build();

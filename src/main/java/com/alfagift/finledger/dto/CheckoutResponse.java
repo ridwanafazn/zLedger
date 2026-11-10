@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -25,6 +26,8 @@ public class CheckoutResponse {
     private Currency currency;
     private BigDecimal totalAmount;
     private BigDecimal balanceRemaining;
+    /** Saldo pelanggan per mata uang setelah transaksi. */
+    private Map<Currency, BigDecimal> balances;
     private LocalDateTime processedAt;
     private String status;
 }

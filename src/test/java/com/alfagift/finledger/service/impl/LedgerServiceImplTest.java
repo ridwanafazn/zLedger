@@ -252,6 +252,125 @@ class LedgerServiceImplTest {
         assertThat(event.getTransactionId()).isEqualTo(response.getTransactionId().toString());
     }
 
+    @Test
+    @DisplayName("Harus memecah saldo per mata uang sesuai tenders (multi-currency split)")
+    void processMultiTenderPayment_shouldSplitBalanceAcrossCurrencies() {
+        // Given
+        Account apoinCustomer = Account.builder()
+                .id(UUID.randomUUID())
+                .ownerId("cust-001")
+                .accountName("Dompet cust-001 - A_POIN")
+                .accountType(AccountType.LIABILITY)
+                .currency(Currency.A_POIN)
+                .balance(new BigDecimal("100000.00"))
+                .build();
+
+        Account apoinMerchant = Account.builder()
+                .id(UUID.randomUUID())
+                .ownerId("merch-001")
+                .accountName("Dompet Merchant merch-001 - A_POIN")
+                .accountType(AccountType.REVENUE)
+                .currency(Currency.A_POIN)
+                .balance(new BigDecimal("500000.00"))
+                .build();
+
+        CheckoutRequest splitRequest = CheckoutRequest.builder()
+                .ownerId("cust-001")
+                .merchantId("merch-001")
+                .totalAmount(new BigDecimal("100000.00"))
+                .currency(Currency.IDR)
+                .idempotencyKey("idem-split-001")
+                .tenders(List.of(
+                        TenderDetail.builder()
+                                .currency(Currency.IDR)
+                                .amount(new BigDecimal("80000.00"))
+                                .description("Pembayaran IDR")
+                                .build(),
+                        TenderDetail.builder()
+                                .currency(Currency.A_POIN)
+                                .amount(new BigDecimal("20000.00"))
+                                .description("Pembayaran A-Poin")
+                                .build()
+                ))
+                .build();
+
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.IDR))
+                .thenReturn(Optional.of(customerAccount));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.IDR))
+                .thenReturn(Optional.of(merchantAccount));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("cust-001", Currency.A_POIN))
+                .thenReturn(Optional.of(apoinCustomer));
+        when(accountRepository.findAccountByOwnerIdAndCurrencyCustom("merch-001", Currency.A_POIN))
+                .thenReturn(Optional.of(apoinMerchant));
+        when(journalTransactionRepository.save(any(JournalTransaction.class)))
+                .thenAnswer(invocation -> {
+                    JournalTransaction jt = invocation.getArgument(0);
+                    jt.setId(UUID.randomUUID());
+                    return jt;
+                });
+        when(accountRepository.save(any(Account.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        CheckoutResponse response = ledgerService.processMultiTenderPayment(splitRequest);
+
+        // Then - saldo terpotong di masing-masing mata uang
+        assertThat(customerAccount.getBalance()).isEqualByComparingTo("20000.00");
+        assertThat(apoinCustomer.getBalance()).isEqualByComparingTo("80000.00");
+        assertThat(merchantAccount.getBalance()).isEqualByComparingTo("580000.00");
+        assertThat(apoinMerchant.getBalance()).isEqualByComparingTo("520000.00");
+
+        assertThat(response.getBalances())
+                .containsEntry(Currency.IDR, new BigDecimal("20000.00"))
+                .containsEntry(Currency.A_POIN, new BigDecimal("80000.00"));
+        assertThat(response.getBalanceRemaining()).isEqualByComparingTo("20000.00");
+
+        // Then - 4 entri: 2 DEBIT + 2 CREDIT, total seimbang
+        JournalTransaction captured = captureJournalTransaction();
+        assertThat(captured.getLedgerEntries()).hasSize(4);
+
+        BigDecimal totalDebit = captured.getLedgerEntries().stream()
+                .filter(e -> e.getEntryType() == EntryType.DEBIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCredit = captured.getLedgerEntries().stream()
+                .filter(e -> e.getEntryType() == EntryType.CREDIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        assertThat(totalDebit).isEqualByComparingTo("100000.00");
+        assertThat(totalCredit).isEqualByComparingTo("100000.00");
+
+        // Then - event A_POIN memakai nominal tender A_POIN, bukan total
+        ArgumentCaptor<PointsAwardedEvent> eventCaptor = ArgumentCaptor.forClass(PointsAwardedEvent.class);
+        verify(outboxService).enqueue(
+                eq("JOURNAL_TRANSACTION"), anyString(), eq("POINTS_AWARDED"), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().getAmount()).isEqualByComparingTo("20000.00");
+    }
+
+    @Test
+    @DisplayName("Harus menolak checkout bila total tender != totalAmount")
+    void processMultiTenderPayment_shouldRejectTenderTotalMismatch() {
+        CheckoutRequest mismatch = CheckoutRequest.builder()
+                .ownerId("cust-001")
+                .merchantId("merch-001")
+                .totalAmount(new BigDecimal("100000.00"))
+                .currency(Currency.IDR)
+                .idempotencyKey("idem-mismatch")
+                .tenders(List.of(TenderDetail.builder()
+                        .currency(Currency.IDR)
+                        .amount(new BigDecimal("50000.00"))
+                        .description("Kurang")
+                        .build()))
+                .build();
+
+        assertThatThrownBy(() -> ledgerService.processMultiTenderPayment(mismatch))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tidak sama");
+
+        verify(journalTransactionRepository, never()).save(any());
+        verify(accountRepository, never()).save(any());
+    }
+
     /* ------------------------------------------------------------------ */
     /* Test Case 2: Insufficient balance throws exception                */
     /* ------------------------------------------------------------------ */
